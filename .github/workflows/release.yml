@@ -1,0 +1,50 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag name to update major version tag for'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  update-major-tag:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.inputs.tag || github.event.release.tag_name }}
+
+      - name: Update major version tag
+        run: |
+          set -e
+
+          TAG_NAME="${{ github.event.inputs.tag || github.event.release.tag_name }}"
+          VERSION="${TAG_NAME#v}"
+
+          echo "Processing tag: $TAG_NAME"
+
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "Error: Tag must follow semantic versioning (vX.Y.Z)"
+            exit 1
+          fi
+
+          MAJOR=$(echo "$VERSION" | cut -d. -f1)
+          MAJOR_TAG="v${MAJOR}"
+
+          echo "Updating major tag: $MAJOR_TAG -> $TAG_NAME"
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+
+          git tag -fa "$MAJOR_TAG" -m "Update $MAJOR_TAG to $TAG_NAME"
+          git push origin "$MAJOR_TAG" --force
+
+          echo "Successfully updated $MAJOR_TAG to point to $TAG_NAME"

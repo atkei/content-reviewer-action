@@ -1,0 +1,58 @@
+name: 'Content Reviewer'
+description: 'AI-powered content review for text files'
+author: 'atkei'
+branding:
+  icon: 'file-text'
+  color: 'blue'
+
+inputs:
+  files:
+    description: 'Files to review (space-separated, supports glob patterns)'
+    required: true
+
+  api-key:
+    description: 'API key for LLM provider (or use ANTHROPIC_API_KEY, OPENAI_API_KEY, GOOGLE_API_KEY env vars)'
+    required: false
+
+  provider:
+    description: 'LLM provider (openai, anthropic, google)'
+    required: false
+
+  model:
+    description: 'LLM model to use'
+    required: false
+
+  language:
+    description: 'Review language (ja, en)'
+    required: false
+
+  config:
+    description: 'Path to configuration file'
+    required: false
+
+  fail-on-error:
+    description: 'Fail the action if errors are found'
+    required: false
+    default: 'false'
+
+  comment-pr:
+    description: 'Post review results as PR comment (requires pull_request event)'
+    required: false
+    default: 'false'
+
+outputs:
+  results:
+    description: 'Review results in JSON format'
+
+  summary:
+    description: 'Review summary text'
+
+  has-errors:
+    description: 'Whether errors were found (true/false)'
+
+  has-warnings:
+    description: 'Whether warnings were found (true/false)'
+
+runs:
+  using: 'node20'
+  main: 'dist/index.js'
