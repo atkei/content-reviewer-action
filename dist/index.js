@@ -17235,7 +17235,7 @@ function isJSONObject(value) {
 
 /***/ }),
 
-/***/ 8315:
+/***/ 3184:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -17268,13 +17268,16 @@ __export(index_exports, {
   DEFAULT_INSTRUCTION_EN: () => DEFAULT_INSTRUCTION_EN,
   DEFAULT_INSTRUCTION_JA: () => DEFAULT_INSTRUCTION_JA,
   DEFAULT_LLM_CONFIG: () => DEFAULT_LLM_CONFIG,
+  DEFAULT_SEVERITY_LEVEL: () => DEFAULT_SEVERITY_LEVEL,
   ENV_VARS: () => ENV_VARS,
   LLMError: () => LLMError,
   MissingApiKeyError: () => MissingApiKeyError,
   PROVIDER_DEFAULT_MODELS: () => PROVIDER_DEFAULT_MODELS,
+  SEVERITY_LEVELS: () => SEVERITY_LEVELS,
   UnsupportedProviderError: () => UnsupportedProviderError,
   createLLMClient: () => createLLMClient,
   createReviewConfig: () => createReviewConfig,
+  filterIssuesBySeverity: () => filterIssuesBySeverity,
   resolveApiKey: () => resolveApiKey,
   reviewIssueSchema: () => reviewIssueSchema,
   reviewResponseSchema: () => reviewResponseSchema,
@@ -17332,6 +17335,20 @@ var MissingApiKeyError = class extends ContentReviewerError {
   }
 };
 
+// src/filter.ts
+var SEVERITY_LEVELS = {
+  error: 3,
+  warning: 2,
+  suggestion: 1
+};
+var DEFAULT_SEVERITY_LEVEL = Object.keys(SEVERITY_LEVELS).reduce(
+  (min, key) => SEVERITY_LEVELS[key] < SEVERITY_LEVELS[min] ? key : min
+);
+function filterIssuesBySeverity(issues, minLevel) {
+  const minLevelValue = SEVERITY_LEVELS[minLevel];
+  return issues.filter((issue) => SEVERITY_LEVELS[issue.severity] >= minLevelValue);
+}
+
 // src/config.ts
 var PROVIDER_DEFAULT_MODELS = {
   openai: "gpt-4.1-mini",
@@ -17356,7 +17373,8 @@ function createReviewConfig(input = {}) {
       provider,
       model,
       apiKey: input.llm?.apiKey
-    }
+    },
+    severityLevel: input.severityLevel
   };
 }
 function resolveApiKey(config) {
@@ -17390,6 +17408,12 @@ function validateConfig(config) {
   }
   if (!config.llm.model) {
     throw new Error("LLM model is required");
+  }
+  if (config.severityLevel !== void 0 && !(config.severityLevel in SEVERITY_LEVELS)) {
+    const validLevels = Object.keys(SEVERITY_LEVELS).join(", ");
+    throw new Error(
+      `Invalid severity level: ${config.severityLevel}. Valid levels are: ${validLevels}`
+    );
   }
 }
 
@@ -17456,48 +17480,80 @@ function createLLMClient(config, apiKey) {
 }
 
 // src/default-instructions.ts
-var DEFAULT_INSTRUCTION_EN = `You are a professional editor and proofreader.
-Please review the provided text for basic writing issues according to the following criteria:
+var DEFAULT_INSTRUCTION_EN = `You are a professional editor for technical writing.
+Please review the provided text (e.g., blog posts, technical documents) and point out issues with clear, actionable suggestions.
 
 # Review Criteria
+Report each issue with the appropriate severity.
 
-## Grammar & Spelling
-- Correct typos and spelling errors.
-- Fix grammatical mistakes.
+## error
+- Typos / spelling mistakes
+- Grammar mistakes
+- Harassment, hate, or discrimination (personal attacks, slurs, dehumanizing language, advocating harm)
+- Exposure of sensitive information (API keys, secrets, personal data)
+- Dangerous instructions without proper warnings / safer alternatives
+- Technically incorrect or misleading statements
 
-## Clarity & Flow
-- Ensure sentences are clear and easy to read.
-- Point out ambiguous or confusing phrasing.
+## warning
+- Missing references/citations for non-obvious claims (when applicable)
 
-## Consistency
-- Check for contradictions within the text.
-- Ensure consistent terminology and formatting.
+## suggestion
+- Missing assumptions / prerequisites (OS, versions, environment, context)
+- Reproducibility issues (missing steps, commands, expected outputs, pitfalls)
+- Missing scope clarification (what is covered / not covered)
+- Clarity improvements, wording refinements, optional re-structuring
+- Consistency improvements (terminology, formatting) when not misleading
 `;
-var DEFAULT_INSTRUCTION_JA = `\u3042\u306A\u305F\u306F\u30D7\u30ED\u306E\u7DE8\u96C6\u8005\u30FB\u6821\u6B63\u8005\u3067\u3059\u3002
-\u63D0\u4F9B\u3055\u308C\u305F\u30C6\u30AD\u30B9\u30C8\u3092\u3001\u4EE5\u4E0B\u306E\u57FA\u6E96\u306B\u5F93\u3063\u3066\u57FA\u672C\u7684\u306A\u6587\u7AE0\u306E\u554F\u984C\u70B9\u306B\u3064\u3044\u3066\u30EC\u30D3\u30E5\u30FC\u3057\u3066\u304F\u3060\u3055\u3044\uFF1A
+var DEFAULT_INSTRUCTION_JA = `\u3042\u306A\u305F\u306F\u6280\u8853\u6587\u66F8\u306B\u5F37\u3044\u30D7\u30ED\u306E\u7DE8\u96C6\u8005\u30FB\u6821\u6B63\u8005\u3067\u3059\u3002
+\u63D0\u4F9B\u3055\u308C\u305F\u30C6\u30AD\u30B9\u30C8\uFF08\u6280\u8853\u30D6\u30ED\u30B0\u8A18\u4E8B\u30FB\u6280\u8853\u30C9\u30AD\u30E5\u30E1\u30F3\u30C8\u7B49\uFF09\u3092\u30EC\u30D3\u30E5\u30FC\u3057\u3001\u554F\u984C\u70B9\u3068\u6539\u5584\u6848\u3092\u5177\u4F53\u7684\u306B\u6307\u6458\u3057\u3066\u304F\u3060\u3055\u3044\u3002
 
 # \u30EC\u30D3\u30E5\u30FC\u57FA\u6E96
+\u5404issue\u306B\u306F\u9069\u5207\u306Aseverity\u3092\u4ED8\u3051\u3066\u5831\u544A\u3057\u3066\u304F\u3060\u3055\u3044\u3002
 
-## \u8AA4\u5B57\u8131\u5B57\u30FB\u6587\u6CD5
-- \u8AA4\u5B57\u3084\u8131\u5B57\u3092\u6307\u6458\u3057\u3066\u304F\u3060\u3055\u3044\u3002
-- \u6587\u6CD5\u7684\u306A\u8AA4\u308A\u3092\u4FEE\u6B63\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+## error
+- \u8AA4\u5B57\u8131\u5B57
+- \u6587\u6CD5\u7684\u306A\u8AA4\u308A
+- \u4EBA\u6A29\u4FB5\u5BB3\u30FB\u5DEE\u5225\u30FB\u30D8\u30A4\u30C8\u30FB\u500B\u4EBA\u653B\u6483\uFF08\u4FAE\u8FB1/\u8511\u79F0/\u975E\u4EBA\u9593\u5316/\u66B4\u529B\u306E\u6247\u52D5\u306A\u3069\uFF09
+- API\u30AD\u30FC\u30FB\u79D8\u5BC6\u60C5\u5831\u30FB\u500B\u4EBA\u60C5\u5831\u306A\u3069\u306E\u9732\u51FA
+- \u5371\u967A\u306A\u624B\u9806\uFF08\u7834\u58CA\u7684\u64CD\u4F5C\u306A\u3069\uFF09\u306B\u6CE8\u610F\u66F8\u304D\u3084\u5B89\u5168\u7B56\u304C\u306A\u3044
+- \u6280\u8853\u7684\u306B\u8AA4\u3063\u3066\u3044\u308B\uFF0F\u8AA4\u89E3\u3092\u62DB\u304F\u4E3B\u5F35
 
-## \u308F\u304B\u308A\u3084\u3059\u3055
-- \u6587\u7AE0\u304C\u660E\u78BA\u3067\u8AAD\u307F\u3084\u3059\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002
-- \u66D6\u6627\u306A\u8868\u73FE\u3084\u5206\u304B\u308A\u306B\u304F\u3044\u8A00\u3044\u56DE\u3057\u304C\u3042\u308C\u3070\u6307\u6458\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+## warning
+- \u975E\u81EA\u660E\u306A\u4E3B\u5F35\u306B\u6839\u62E0\uFF08\u53C2\u7167\u30EA\u30F3\u30AF/\u4E00\u6B21\u60C5\u5831\u306A\u3069\uFF09\u304C\u4E0D\u8DB3\u3057\u3066\u3044\u308B\uFF08\u8A72\u5F53\u3059\u308B\u5834\u5408\uFF09
 
-## \u4E00\u8CAB\u6027\u30FB\u77DB\u76FE
-- \u6587\u4E2D\u3067\u306E\u77DB\u76FE\u70B9\u304C\u306A\u3044\u304B\u78BA\u8A8D\u3057\u3066\u304F\u3060\u3055\u3044\u3002
-- \u7528\u8A9E\u3084\u8868\u8A18\u306E\u63FA\u308C\uFF08\u4F8B\uFF1A\u300C\u30B3\u30F3\u30D4\u30E5\u30FC\u30BF\u300D\u3068\u300C\u30B3\u30F3\u30D4\u30E5\u30FC\u30BF\u30FC\u300D\u306E\u6DF7\u5728\u306A\u3069\uFF09\u3092\u6307\u6458\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+## suggestion
+- \u524D\u63D0\u6761\u4EF6\uFF08OS/\u30D0\u30FC\u30B8\u30E7\u30F3/\u74B0\u5883/\u6761\u4EF6/\u5BFE\u8C61\u8AAD\u8005\u306A\u3069\uFF09\u306E\u4E0D\u8DB3
+- \u518D\u73FE\u6027\u306E\u4E0D\u8DB3\uFF08\u624B\u9806\u3001\u30B3\u30DE\u30F3\u30C9\u3001\u671F\u5F85\u7D50\u679C\u3001\u843D\u3068\u3057\u7A74\u3001\u629C\u3051\u6F0F\u308C\uFF09
+- \u30B9\u30B3\u30FC\u30D7\uFF08\u5BFE\u8C61/\u5BFE\u8C61\u5916\uFF09\u306E\u4E0D\u660E\u78BA\u3055
+- \u8868\u73FE\u306E\u5FAE\u8ABF\u6574\u3001\u308F\u304B\u308A\u3084\u3059\u3055\u30FB\u8AAD\u307F\u3084\u3059\u3055\u30FB\u6D41\u308C\u306E\u6539\u5584\u3001\u4EFB\u610F\u306E\u69CB\u6210\u6539\u5584
+- \u7528\u8A9E\u3084\u8868\u8A18\u306E\u63FA\u308C\u306A\u3069\u306E\u4E00\u8CAB\u6027\u6539\u5584\uFF08\u8AA4\u89E3\u3092\u62DB\u304B\u306A\u3044\u7BC4\u56F2\uFF09
 `;
 
 // src/prompts.ts
+function getIncludedLevels(minLevel) {
+  const minValue = SEVERITY_LEVELS[minLevel];
+  return Object.keys(SEVERITY_LEVELS).filter((level) => SEVERITY_LEVELS[level] >= minValue).sort((a, b) => SEVERITY_LEVELS[b] - SEVERITY_LEVELS[a]);
+}
+function buildSummaryInstruction(minLevel, language) {
+  const includedLevels = getIncludedLevels(minLevel);
+  const formatLevels = (levels) => levels.map((l) => `"${l}"`).join(", ");
+  if (language === "ja") {
+    return `
+\u91CD\u8981: \u554F\u984C\u70B9(issues)\u306F\u5168\u3066\u9069\u5207\u306Aseverity\u3067\u5831\u544A\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+\u305F\u3060\u3057\u3001\u7DCF\u8A55(summary)\u306F ${formatLevels(includedLevels)} \u306E\u554F\u984C\u306E\u307F\u306B\u57FA\u3065\u3044\u3066\u8A18\u8FF0\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+`;
+  }
+  return `
+Important: Report all issues with their appropriate severity levels.
+However, the summary should only reference issues with severity ${formatLevels(includedLevels)}.
+`;
+}
 var allPrompts = {
   ja: {
-    generateSummary: (errorCount, warningCount) => `\u30EC\u30D3\u30E5\u30FC\u5B8C\u4E86\u3002\u30A8\u30E9\u30FC${errorCount}\u4EF6\u3001\u8B66\u544A${warningCount}\u4EF6\u3092\u691C\u51FA\u3002`,
-    buildSystemPrompt: ({ instruction }) => {
-      const instructions = instruction || DEFAULT_INSTRUCTION_JA;
-      return `${instructions}
+    buildSystemPrompt: ({ instruction, severityLevel }) => {
+      const instructions = (instruction || DEFAULT_INSTRUCTION_JA).trimEnd() + "\n";
+      const summaryInstruction = severityLevel ? buildSummaryInstruction(severityLevel, "ja").trim() + "\n" : "";
+      return `${instructions}${summaryInstruction}
 \u30EC\u30D3\u30E5\u30FC\u7D50\u679C\u306F\u65E5\u672C\u8A9E\u3067\u3001\u4EE5\u4E0B\u306EJSON\u69CB\u9020\u3067\u8FD4\u3057\u3066\u304F\u3060\u3055\u3044\uFF1A
 - issues: \u898B\u3064\u304B\u3063\u305F\u554F\u984C\u70B9\u306E\u914D\u5217
   - severity: \u6DF1\u523B\u5EA6
@@ -17510,17 +17566,18 @@ var allPrompts = {
 - summary: \u5168\u4F53\u7684\u306A\u7DCF\u8A55\uFF082-3\u6587\u7A0B\u5EA6\uFF09
 
 \u6CE8\u610F\uFF1A
+- \u6709\u52B9\u306AJSON\u306E\u307F\u3092\u8FD4\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u524D\u5F8C\u306B\u6587\u7AE0\u3084Markdown\u306E\u30B3\u30FC\u30C9\u30D6\u30ED\u30C3\u30AF\u7B49\u3092\u4ED8\u3051\u306A\u3044\u3067\u304F\u3060\u3055\u3044\uFF09\u3002
 - lineNumber\u306F\u4E0D\u8981\u3067\u3059\u3002matchText\u306E\u307F\u3092\u63D0\u4F9B\u3057\u3066\u304F\u3060\u3055\u3044\u3002
 - \u5EFA\u8A2D\u7684\u3067\u5177\u4F53\u7684\u306A\u30D5\u30A3\u30FC\u30C9\u30D0\u30C3\u30AF\u3092\u63D0\u4F9B\u3057\u3066\u304F\u3060\u3055\u3044\u3002
 `;
     },
-    buildUserPrompt: () => "\u4EE5\u4E0B\u306E\u8A18\u4E8B\u3092\u30EC\u30D3\u30E5\u30FC\u3057\u3066\u304F\u3060\u3055\u3044\uFF1A\n\n---\n"
+    buildUserPrompt: () => "\u4EE5\u4E0B\u306E\u30C6\u30AD\u30B9\u30C8\u3092\u30EC\u30D3\u30E5\u30FC\u3057\u3066\u304F\u3060\u3055\u3044\uFF1A\n\n\n"
   },
   en: {
-    generateSummary: (errorCount, warningCount) => `Review completed. Found ${errorCount} errors and ${warningCount} warnings.`,
-    buildSystemPrompt: ({ instruction }) => {
-      const instructions = instruction || DEFAULT_INSTRUCTION_EN;
-      return `${instructions}
+    buildSystemPrompt: ({ instruction, severityLevel }) => {
+      const instructions = (instruction || DEFAULT_INSTRUCTION_EN).trimEnd() + "\n";
+      const summaryInstruction = severityLevel ? buildSummaryInstruction(severityLevel, "en").trim() + "\n" : "";
+      return `${instructions}${summaryInstruction}
 Provide the review results in English with the following JSON structure:
 - issues: Array of found issues
   - severity: Severity level
@@ -17533,11 +17590,12 @@ Provide the review results in English with the following JSON structure:
 - summary: Overall assessment (2-3 sentences)
 
 Note:
+- Return valid JSON only (do not wrap in markdown code fences or add extra text).
 - Do not provide lineNumber. Only provide matchText.
 - Provide constructive and specific feedback.
 `;
     },
-    buildUserPrompt: () => "Please review the following article:\n\n---\n"
+    buildUserPrompt: () => "Please review the following text:\n\n\n"
   }
 };
 function getLanguagePrompts(language) {
@@ -17554,11 +17612,11 @@ var ContentReviewer = class {
   }
   async review(document) {
     const llmResult = await this.runLLMReview(document);
-    const summary = llmResult.summary || this.generateSummary(llmResult.issues);
+    const issues = this.config.severityLevel ? filterIssuesBySeverity(llmResult.issues, this.config.severityLevel) : llmResult.issues;
     return {
       source: document.source,
-      issues: llmResult.issues,
-      summary,
+      issues,
+      summary: llmResult.summary,
       reviewedAt: /* @__PURE__ */ new Date()
     };
   }
@@ -17577,22 +17635,16 @@ var ContentReviewer = class {
       summary: reviewData.summary
     };
   }
-  generateSummary(issues) {
-    const errorCount = issues.filter((i) => i.severity === "error").length;
-    const warningCount = issues.filter((i) => i.severity === "warning").length;
-    const { generateSummary } = getLanguagePrompts(this.config.language);
-    return generateSummary(errorCount, warningCount);
-  }
   buildSystemPrompt() {
-    const { instruction, language } = this.config;
+    const { instruction, language, severityLevel } = this.config;
     const { buildSystemPrompt } = getLanguagePrompts(language);
-    return buildSystemPrompt({ instruction });
+    return buildSystemPrompt({ instruction, severityLevel });
   }
   buildUserPrompt(document) {
     const { language } = this.config;
     const { buildUserPrompt } = getLanguagePrompts(language);
     const prompt = buildUserPrompt();
-    return prompt + document.rawContent + "\n---";
+    return prompt + document.rawContent;
   }
   findFirstMatchingLineNumber(rawContent, matchText) {
     const index = rawContent.indexOf(matchText);
@@ -57365,7 +57417,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.buildReviewConfig = buildReviewConfig;
 const fs = __importStar(__nccwpck_require__(1943));
 const path_1 = __nccwpck_require__(6928);
-const core_1 = __nccwpck_require__(8315);
+const core_1 = __nccwpck_require__(3184);
 function isObject(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -57961,7 +58013,7 @@ const fs = __importStar(__nccwpck_require__(1943));
 const core = __importStar(__nccwpck_require__(6966));
 const github = __importStar(__nccwpck_require__(4903));
 const glob_1 = __nccwpck_require__(3360);
-const core_1 = __nccwpck_require__(8315);
+const core_1 = __nccwpck_require__(3184);
 const config_1 = __nccwpck_require__(6878);
 const github_1 = __nccwpck_require__(4171);
 async function parseDocument(filePath) {
