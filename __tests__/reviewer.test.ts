@@ -9,6 +9,12 @@ vi.mock('glob', () => ({
   glob: vi.fn(),
 }));
 
+vi.mock('@actions/github', () => ({
+  context: {
+    eventName: 'push',
+  },
+}));
+
 const mockReviewFn = vi.fn();
 
 vi.mock('@content-reviewer/core', () => {
