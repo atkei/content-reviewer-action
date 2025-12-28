@@ -30,6 +30,7 @@ describe('getInputs', () => {
     const inputs = getInputs();
     expect(inputs.provider).toBe('openai');
     expect(inputs.language).toBe('en');
+    expect(inputs.severity).toBe('warning');
     expect(inputs.failOnError).toBe(false);
     expect(inputs.commentPr).toBe(false);
   });
@@ -70,6 +71,7 @@ describe('getInputs', () => {
         model: 'claude-3-opus',
         language: 'ja',
         config: '.reviewrc.json',
+        severity: 'error',
       };
       return values[name] || '';
     });
@@ -86,6 +88,7 @@ describe('getInputs', () => {
     expect(inputs.model).toBe('claude-3-opus');
     expect(inputs.language).toBe('ja');
     expect(inputs.config).toBe('.reviewrc.json');
+    expect(inputs.severity).toBe('error');
     expect(inputs.failOnError).toBe(true);
     expect(inputs.commentPr).toBe(true);
   });
@@ -110,6 +113,17 @@ describe('getInputs', () => {
     vi.mocked(core.getBooleanInput).mockReturnValue(false);
 
     expect(() => getInputs()).toThrow('Invalid language: fr');
+  });
+
+  it('should throw error for invalid severity', () => {
+    vi.mocked(core.getInput).mockImplementation((name) => {
+      if (name === 'files') return 'test.txt';
+      if (name === 'severity') return 'critical';
+      return '';
+    });
+    vi.mocked(core.getBooleanInput).mockReturnValue(false);
+
+    expect(() => getInputs()).toThrow('Invalid severity: critical');
   });
 
   it('should throw error when no files specified', () => {

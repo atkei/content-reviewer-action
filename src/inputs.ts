@@ -2,6 +2,7 @@ import * as core from '@actions/core';
 
 export type Provider = 'openai' | 'anthropic' | 'google';
 export type Language = 'ja' | 'en';
+export type Severity = 'error' | 'warning' | 'suggestion';
 
 export type ActionInputs = Readonly<{
   files: string[];
@@ -10,6 +11,7 @@ export type ActionInputs = Readonly<{
   model?: string;
   language?: Language;
   config?: string;
+  severity: Severity;
   failOnError: boolean;
   commentPr: boolean;
 }>;
@@ -20,6 +22,10 @@ function isValidProvider(value: string): value is Provider {
 
 function isValidLanguage(value: string): value is Language {
   return ['ja', 'en'].includes(value);
+}
+
+function isValidSeverity(value: string): value is Severity {
+  return ['error', 'warning', 'suggestion'].includes(value);
 }
 
 export function getInputs(): ActionInputs {
@@ -64,6 +70,12 @@ export function getInputs(): ActionInputs {
     language = 'en';
   }
 
+  const severityRaw = core.getInput('severity') || 'warning';
+  if (!isValidSeverity(severityRaw)) {
+    throw new Error(`Invalid severity: ${severityRaw}. Must be one of: error, warning, suggestion`);
+  }
+  const severity: Severity = severityRaw;
+
   const failOnError = core.getBooleanInput('fail-on-error');
   const commentPr = core.getBooleanInput('comment-pr');
 
@@ -74,6 +86,7 @@ export function getInputs(): ActionInputs {
     model,
     language,
     config,
+    severity,
     failOnError,
     commentPr,
   };

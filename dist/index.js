@@ -57466,6 +57466,7 @@ async function buildReviewConfig(inputs) {
                 apiKey: inputs.apiKey,
                 model: inputs.model,
             },
+            severityLevel: inputs.severity,
         });
         (0, core_1.validateConfig)(config);
         return config;
@@ -57481,6 +57482,7 @@ async function buildReviewConfig(inputs) {
             apiKey: inputs.apiKey ?? fileConfig.llm?.apiKey,
             model: inputs.model ?? fileConfig.llm?.model,
         },
+        severityLevel: inputs.severity ?? fileConfig.severityLevel,
     });
     (0, core_1.validateConfig)(config);
     return config;
@@ -57789,6 +57791,9 @@ function isValidProvider(value) {
 function isValidLanguage(value) {
     return ['ja', 'en'].includes(value);
 }
+function isValidSeverity(value) {
+    return ['error', 'warning', 'suggestion'].includes(value);
+}
 function getInputs() {
     const filesInput = core.getInput('files', { required: true });
     const files = filesInput.split(/\s+/).filter((f) => f.length > 0);
@@ -57824,6 +57829,11 @@ function getInputs() {
         // When config is not provided, default in code for backward compatibility.
         language = 'en';
     }
+    const severityRaw = core.getInput('severity') || 'warning';
+    if (!isValidSeverity(severityRaw)) {
+        throw new Error(`Invalid severity: ${severityRaw}. Must be one of: error, warning, suggestion`);
+    }
+    const severity = severityRaw;
     const failOnError = core.getBooleanInput('fail-on-error');
     const commentPr = core.getBooleanInput('comment-pr');
     return {
@@ -57833,6 +57843,7 @@ function getInputs() {
         model,
         language,
         config,
+        severity,
         failOnError,
         commentPr,
     };

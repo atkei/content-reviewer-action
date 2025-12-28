@@ -32,6 +32,7 @@ describe('reviewFiles', () => {
     files: ['test.txt'],
     provider: 'openai',
     language: 'en',
+    severity: 'warning',
     failOnError: false,
     commentPr: false,
   };

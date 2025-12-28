@@ -76,6 +76,7 @@ export async function buildReviewConfig(inputs: ActionInputs): Promise<ReviewCon
         apiKey: inputs.apiKey,
         model: inputs.model,
       },
+      severityLevel: inputs.severity,
     });
     validateConfig(config);
     return config;
@@ -93,6 +94,7 @@ export async function buildReviewConfig(inputs: ActionInputs): Promise<ReviewCon
       apiKey: inputs.apiKey ?? fileConfig.llm?.apiKey,
       model: inputs.model ?? fileConfig.llm?.model,
     },
+    severityLevel: inputs.severity ?? fileConfig.severityLevel,
   });
 
   validateConfig(config);

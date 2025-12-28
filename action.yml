@@ -30,6 +30,11 @@ inputs:
     description: 'Path to configuration file'
     required: false
 
+  severity:
+    description: 'Minimum severity level to report (error, warning, suggestion)'
+    required: false
+    default: 'warning'
+
   fail-on-error:
     description: 'Fail the action if errors are found'
     required: false
