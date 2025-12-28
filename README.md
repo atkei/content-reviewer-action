@@ -71,6 +71,7 @@ jobs:
 | `model`         | LLM model to use                                                          | No       | Provider default |
 | `language`      | Review language (`en`, `ja`)                                              | No       | `en`             |
 | `config`        | Path to configuration file                                                | No       | -                |
+| `severity`      | Minimum severity level to report (`error`, `warning`, `suggestion`)       | No       | `warning`        |
 | `fail-on-error` | Fail the action if errors are found                                       | No       | `false`          |
 | `comment-pr`    | Post review results as PR review comments (requires `pull_request` event) | No       | `false`          |
 
