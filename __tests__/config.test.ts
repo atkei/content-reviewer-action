@@ -37,6 +37,7 @@ describe('buildReviewConfig', () => {
       language: 'en',
       apiKey: 'k',
       model: 'm',
+      severity: 'warning',
       failOnError: false,
       commentPr: false,
     };
@@ -46,6 +47,7 @@ describe('buildReviewConfig', () => {
     expect(mocks.createReviewConfigMock).toHaveBeenCalledWith({
       language: 'en',
       llm: { provider: 'openai', apiKey: 'k', model: 'm' },
+      severityLevel: 'warning',
     });
     expect(mocks.validateConfigMock).toHaveBeenCalledTimes(1);
   });
@@ -73,6 +75,7 @@ describe('buildReviewConfig', () => {
       provider: 'openai',
       language: 'en',
       // no apiKey/model => keep file values
+      severity: 'warning',
       failOnError: false,
       commentPr: false,
       config: 'config.json',
@@ -113,6 +116,7 @@ describe('buildReviewConfig', () => {
 
     const inputs: ActionInputs = {
       files: ['test.txt'],
+      severity: 'warning',
       failOnError: false,
       commentPr: false,
       config: 'config.json',
