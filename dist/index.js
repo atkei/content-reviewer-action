@@ -17235,7 +17235,7 @@ function isJSONObject(value) {
 
 /***/ }),
 
-/***/ 3184:
+/***/ 8469:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -17287,16 +17287,30 @@ module.exports = __toCommonJS(index_exports);
 
 // src/schemas.ts
 var import_zod = __nccwpck_require__(8661);
+
+// src/severity.ts
+var SEVERITIES = {
+  error: { priority: 3 },
+  warning: { priority: 2 },
+  suggestion: { priority: 1 }
+};
+var DEFAULT = "warning";
+var SEVERITY_LEVELS = Object.fromEntries(
+  Object.entries(SEVERITIES).map(([k, v]) => [k, v.priority])
+);
+var DEFAULT_SEVERITY_LEVEL = DEFAULT;
+
+// src/schemas.ts
+var severityKeys = Object.keys(SEVERITY_LEVELS);
 var reviewIssueSchema = import_zod.z.object({
-  severity: import_zod.z.enum(["error", "warning", "suggestion"]),
+  severity: import_zod.z.enum(severityKeys),
   message: import_zod.z.string(),
   matchText: import_zod.z.string().optional(),
   lineNumber: import_zod.z.number().optional(),
   suggestion: import_zod.z.string().optional()
 });
 var reviewResponseSchema = import_zod.z.object({
-  issues: import_zod.z.array(reviewIssueSchema),
-  summary: import_zod.z.string()
+  issues: import_zod.z.array(reviewIssueSchema)
 });
 
 // src/constants.ts
@@ -17334,20 +17348,6 @@ var MissingApiKeyError = class extends ContentReviewerError {
     this.name = "MissingApiKeyError";
   }
 };
-
-// src/filter.ts
-var SEVERITY_LEVELS = {
-  error: 3,
-  warning: 2,
-  suggestion: 1
-};
-var DEFAULT_SEVERITY_LEVEL = Object.keys(SEVERITY_LEVELS).reduce(
-  (min, key) => SEVERITY_LEVELS[key] < SEVERITY_LEVELS[min] ? key : min
-);
-function filterIssuesBySeverity(issues, minLevel) {
-  const minLevelValue = SEVERITY_LEVELS[minLevel];
-  return issues.filter((issue) => SEVERITY_LEVELS[issue.severity] >= minLevelValue);
-}
 
 // src/config.ts
 var PROVIDER_DEFAULT_MODELS = {
@@ -17530,30 +17530,11 @@ var DEFAULT_INSTRUCTION_JA = `\u3042\u306A\u305F\u306F\u6280\u8853\u6587\u66F8\u
 `;
 
 // src/prompts.ts
-function getIncludedLevels(minLevel) {
-  const minValue = SEVERITY_LEVELS[minLevel];
-  return Object.keys(SEVERITY_LEVELS).filter((level) => SEVERITY_LEVELS[level] >= minValue).sort((a, b) => SEVERITY_LEVELS[b] - SEVERITY_LEVELS[a]);
-}
-function buildSummaryInstruction(minLevel, language) {
-  const includedLevels = getIncludedLevels(minLevel);
-  const formatLevels = (levels) => levels.map((l) => `"${l}"`).join(", ");
-  if (language === "ja") {
-    return `
-\u91CD\u8981: \u554F\u984C\u70B9(issues)\u306F\u5168\u3066\u9069\u5207\u306Aseverity\u3067\u5831\u544A\u3057\u3066\u304F\u3060\u3055\u3044\u3002
-\u305F\u3060\u3057\u3001\u7DCF\u8A55(summary)\u306F ${formatLevels(includedLevels)} \u306E\u554F\u984C\u306E\u307F\u306B\u57FA\u3065\u3044\u3066\u8A18\u8FF0\u3057\u3066\u304F\u3060\u3055\u3044\u3002
-`;
-  }
-  return `
-Important: Report all issues with their appropriate severity levels.
-However, the summary should only reference issues with severity ${formatLevels(includedLevels)}.
-`;
-}
 var allPrompts = {
   ja: {
-    buildSystemPrompt: ({ instruction, severityLevel }) => {
+    buildSystemPrompt: ({ instruction }) => {
       const instructions = (instruction || DEFAULT_INSTRUCTION_JA).trimEnd() + "\n";
-      const summaryInstruction = severityLevel ? buildSummaryInstruction(severityLevel, "ja").trim() + "\n" : "";
-      return `${instructions}${summaryInstruction}
+      return `${instructions}
 \u30EC\u30D3\u30E5\u30FC\u7D50\u679C\u306F\u65E5\u672C\u8A9E\u3067\u3001\u4EE5\u4E0B\u306EJSON\u69CB\u9020\u3067\u8FD4\u3057\u3066\u304F\u3060\u3055\u3044\uFF1A
 - issues: \u898B\u3064\u304B\u3063\u305F\u554F\u984C\u70B9\u306E\u914D\u5217
   - severity: \u6DF1\u523B\u5EA6
@@ -17563,7 +17544,6 @@ var allPrompts = {
   - message: \u554F\u984C\u306E\u8AAC\u660E
   - matchText: \u554F\u984C\u7B87\u6240\u3092\u542B\u3080\u30C6\u30AD\u30B9\u30C8\u7247\uFF0810-50\u6587\u5B57\u7A0B\u5EA6\u3002\u5B8C\u5168\u4E00\u81F4\u3067\u304D\u308B\u56FA\u6709\u306E\u30C6\u30AD\u30B9\u30C8\u3092\u629C\u304D\u51FA\u3057\u3066\u304F\u3060\u3055\u3044\uFF09
   - suggestion: \u6539\u5584\u63D0\u6848\uFF08\u30AA\u30D7\u30B7\u30E7\u30F3\uFF09
-- summary: \u5168\u4F53\u7684\u306A\u7DCF\u8A55\uFF082-3\u6587\u7A0B\u5EA6\uFF09
 
 \u6CE8\u610F\uFF1A
 - \u6709\u52B9\u306AJSON\u306E\u307F\u3092\u8FD4\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u524D\u5F8C\u306B\u6587\u7AE0\u3084Markdown\u306E\u30B3\u30FC\u30C9\u30D6\u30ED\u30C3\u30AF\u7B49\u3092\u4ED8\u3051\u306A\u3044\u3067\u304F\u3060\u3055\u3044\uFF09\u3002
@@ -17574,10 +17554,9 @@ var allPrompts = {
     buildUserPrompt: () => "\u4EE5\u4E0B\u306E\u30C6\u30AD\u30B9\u30C8\u3092\u30EC\u30D3\u30E5\u30FC\u3057\u3066\u304F\u3060\u3055\u3044\uFF1A\n\n\n"
   },
   en: {
-    buildSystemPrompt: ({ instruction, severityLevel }) => {
+    buildSystemPrompt: ({ instruction }) => {
       const instructions = (instruction || DEFAULT_INSTRUCTION_EN).trimEnd() + "\n";
-      const summaryInstruction = severityLevel ? buildSummaryInstruction(severityLevel, "en").trim() + "\n" : "";
-      return `${instructions}${summaryInstruction}
+      return `${instructions}
 Provide the review results in English with the following JSON structure:
 - issues: Array of found issues
   - severity: Severity level
@@ -17587,7 +17566,6 @@ Provide the review results in English with the following JSON structure:
   - message: Issue description
   - matchText: Text snippet containing the issue (10-50 characters, extract unique text that can be exactly matched)
   - suggestion: Improvement suggestion (optional)
-- summary: Overall assessment (2-3 sentences)
 
 Note:
 - Return valid JSON only (do not wrap in markdown code fences or add extra text).
@@ -17605,6 +17583,12 @@ function getLanguagePrompts(language) {
   throw new Error(`Unhandled language: ${language}`);
 }
 
+// src/filter.ts
+function filterIssuesBySeverity(issues, minLevel) {
+  const minLevelValue = SEVERITY_LEVELS[minLevel];
+  return issues.filter((issue) => SEVERITY_LEVELS[issue.severity] >= minLevelValue);
+}
+
 // src/reviewer.ts
 var ContentReviewer = class {
   constructor(config) {
@@ -17616,7 +17600,6 @@ var ContentReviewer = class {
     return {
       source: document.source,
       issues,
-      summary: llmResult.summary,
       reviewedAt: /* @__PURE__ */ new Date()
     };
   }
@@ -17630,15 +17613,12 @@ var ContentReviewer = class {
       ...issue,
       lineNumber: issue.matchText ? this.findFirstMatchingLineNumber(document.rawContent, issue.matchText) : void 0
     }));
-    return {
-      issues,
-      summary: reviewData.summary
-    };
+    return { issues };
   }
   buildSystemPrompt() {
-    const { instruction, language, severityLevel } = this.config;
+    const { instruction, language } = this.config;
     const { buildSystemPrompt } = getLanguagePrompts(language);
-    return buildSystemPrompt({ instruction, severityLevel });
+    return buildSystemPrompt({ instruction });
   }
   buildUserPrompt(document) {
     const { language } = this.config;
@@ -57417,7 +57397,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.buildReviewConfig = buildReviewConfig;
 const fs = __importStar(__nccwpck_require__(1943));
 const path_1 = __nccwpck_require__(6928);
-const core_1 = __nccwpck_require__(3184);
+const core_1 = __nccwpck_require__(8469);
 function isObject(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -58024,7 +58004,7 @@ const fs = __importStar(__nccwpck_require__(1943));
 const core = __importStar(__nccwpck_require__(6966));
 const github = __importStar(__nccwpck_require__(4903));
 const glob_1 = __nccwpck_require__(3360);
-const core_1 = __nccwpck_require__(3184);
+const core_1 = __nccwpck_require__(8469);
 const config_1 = __nccwpck_require__(6878);
 const github_1 = __nccwpck_require__(4171);
 async function parseDocument(filePath) {

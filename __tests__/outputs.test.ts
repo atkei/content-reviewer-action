@@ -28,7 +28,6 @@ describe('setOutputs', () => {
           result: {
             source: 'test.txt',
             issues: [{ severity: 'error', message: 'Test error' }],
-            summary: 'Found issues',
             reviewedAt: new Date(),
           },
         },
@@ -54,7 +53,6 @@ describe('setOutputs', () => {
           result: {
             source: 'doc.md',
             issues: [],
-            summary: 'No issues',
             reviewedAt: new Date(),
           },
         },
