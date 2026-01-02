@@ -15,8 +15,8 @@ importers:
         specifier: ^6.0.1
         version: 6.0.1
       '@content-reviewer/core':
-        specifier: ^0.0.5
-        version: 0.0.5
+        specifier: ^0.0.6
+        version: 0.0.6
       glob:
         specifier: ^10.5.0
         version: 10.5.0
@@ -97,8 +97,8 @@ packages:
     resolution: {integrity: sha512-6o7Y2SeO9vFKB8lArHXehNuusnpddKPk7xqL7T2/b+OvXMRIXUO1rR4wcv1hAFUAT9avGZshty3Wlua/XA7TvA==}
     engines: {node: '>=18'}
 
-  '@content-reviewer/core@0.0.5':
-    resolution: {integrity: sha512-jVqCTnJTnvDKzyuU2BwGFp1v+hsRI/Mhyo/Q5f0Dmjw/xHhNY5inUd5BI1e38bT3idOAlpIgLBTB9tW5nxRafQ==}
+  '@content-reviewer/core@0.0.6':
+    resolution: {integrity: sha512-PuxkleUMpJTBIPoDYlZdnvipUL1Xr3/K4oURXDnNbsCPh5t0CId30ejY6nDb7YLVoZ9aWCLIrdHbXL44pLPeIQ==}
     engines: {node: '>=20.0.0', pnpm: '>=9.0.0'}
 
   '@esbuild/aix-ppc64@0.21.5':
@@ -1487,7 +1487,7 @@ snapshots:
     dependencies:
       json-schema: 0.4.0
 
-  '@content-reviewer/core@0.0.5':
+  '@content-reviewer/core@0.0.6':
     dependencies:
       '@ai-sdk/anthropic': 2.0.56(zod@4.2.1)
       '@ai-sdk/google': 2.0.51(zod@4.2.1)

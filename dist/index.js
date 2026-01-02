@@ -17235,7 +17235,7 @@ function isJSONObject(value) {
 
 /***/ }),
 
-/***/ 8469:
+/***/ 8381:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -17493,9 +17493,13 @@ Report each issue with the appropriate severity.
 - Exposure of sensitive information (API keys, secrets, personal data)
 - Dangerous instructions without proper warnings / safer alternatives
 - Technically incorrect or misleading statements
+- Code examples with syntax errors or incorrect API usage
 
 ## warning
 - Missing references/citations for non-obvious claims (when applicable)
+- Code examples using deprecated APIs or outdated patterns
+- Version-specific content without specifying which version
+- Missing error handling in code examples that could fail
 
 ## suggestion
 - Missing assumptions / prerequisites (OS, versions, environment, context)
@@ -17503,6 +17507,8 @@ Report each issue with the appropriate severity.
 - Missing scope clarification (what is covered / not covered)
 - Clarity improvements, wording refinements, optional re-structuring
 - Consistency improvements (terminology, formatting) when not misleading
+- Long paragraphs that could be broken up for readability
+- Opportunities to use active voice instead of passive voice
 `;
 var DEFAULT_INSTRUCTION_JA = `\u3042\u306A\u305F\u306F\u6280\u8853\u6587\u66F8\u306B\u5F37\u3044\u30D7\u30ED\u306E\u7DE8\u96C6\u8005\u30FB\u6821\u6B63\u8005\u3067\u3059\u3002
 \u63D0\u4F9B\u3055\u308C\u305F\u30C6\u30AD\u30B9\u30C8\uFF08\u6280\u8853\u30D6\u30ED\u30B0\u8A18\u4E8B\u30FB\u6280\u8853\u30C9\u30AD\u30E5\u30E1\u30F3\u30C8\u7B49\uFF09\u3092\u30EC\u30D3\u30E5\u30FC\u3057\u3001\u554F\u984C\u70B9\u3068\u6539\u5584\u6848\u3092\u5177\u4F53\u7684\u306B\u6307\u6458\u3057\u3066\u304F\u3060\u3055\u3044\u3002
@@ -17517,9 +17523,13 @@ var DEFAULT_INSTRUCTION_JA = `\u3042\u306A\u305F\u306F\u6280\u8853\u6587\u66F8\u
 - API\u30AD\u30FC\u30FB\u79D8\u5BC6\u60C5\u5831\u30FB\u500B\u4EBA\u60C5\u5831\u306A\u3069\u306E\u9732\u51FA
 - \u5371\u967A\u306A\u624B\u9806\uFF08\u7834\u58CA\u7684\u64CD\u4F5C\u306A\u3069\uFF09\u306B\u6CE8\u610F\u66F8\u304D\u3084\u5B89\u5168\u7B56\u304C\u306A\u3044
 - \u6280\u8853\u7684\u306B\u8AA4\u3063\u3066\u3044\u308B\uFF0F\u8AA4\u89E3\u3092\u62DB\u304F\u4E3B\u5F35
+- \u30B3\u30FC\u30C9\u4F8B\u306E\u6587\u6CD5\u30A8\u30E9\u30FC\u3084API\u306E\u8AA4\u7528
 
 ## warning
 - \u975E\u81EA\u660E\u306A\u4E3B\u5F35\u306B\u6839\u62E0\uFF08\u53C2\u7167\u30EA\u30F3\u30AF/\u4E00\u6B21\u60C5\u5831\u306A\u3069\uFF09\u304C\u4E0D\u8DB3\u3057\u3066\u3044\u308B\uFF08\u8A72\u5F53\u3059\u308B\u5834\u5408\uFF09
+- \u975E\u63A8\u5968\u306EAPI\u3084\u53E4\u3044\u30D1\u30BF\u30FC\u30F3\u3092\u4F7F\u7528\u3057\u305F\u30B3\u30FC\u30C9\u4F8B
+- \u30D0\u30FC\u30B8\u30E7\u30F3\u56FA\u6709\u306E\u5185\u5BB9\u3067\u30D0\u30FC\u30B8\u30E7\u30F3\u304C\u660E\u8A18\u3055\u308C\u3066\u3044\u306A\u3044
+- \u5931\u6557\u3059\u308B\u53EF\u80FD\u6027\u306E\u3042\u308B\u30B3\u30FC\u30C9\u4F8B\u306B\u30A8\u30E9\u30FC\u30CF\u30F3\u30C9\u30EA\u30F3\u30B0\u304C\u306A\u3044
 
 ## suggestion
 - \u524D\u63D0\u6761\u4EF6\uFF08OS/\u30D0\u30FC\u30B8\u30E7\u30F3/\u74B0\u5883/\u6761\u4EF6/\u5BFE\u8C61\u8AAD\u8005\u306A\u3069\uFF09\u306E\u4E0D\u8DB3
@@ -17527,6 +17537,8 @@ var DEFAULT_INSTRUCTION_JA = `\u3042\u306A\u305F\u306F\u6280\u8853\u6587\u66F8\u
 - \u30B9\u30B3\u30FC\u30D7\uFF08\u5BFE\u8C61/\u5BFE\u8C61\u5916\uFF09\u306E\u4E0D\u660E\u78BA\u3055
 - \u8868\u73FE\u306E\u5FAE\u8ABF\u6574\u3001\u308F\u304B\u308A\u3084\u3059\u3055\u30FB\u8AAD\u307F\u3084\u3059\u3055\u30FB\u6D41\u308C\u306E\u6539\u5584\u3001\u4EFB\u610F\u306E\u69CB\u6210\u6539\u5584
 - \u7528\u8A9E\u3084\u8868\u8A18\u306E\u63FA\u308C\u306A\u3069\u306E\u4E00\u8CAB\u6027\u6539\u5584\uFF08\u8AA4\u89E3\u3092\u62DB\u304B\u306A\u3044\u7BC4\u56F2\uFF09
+- \u656C\u4F53\uFF08\u3067\u3059\u30FB\u307E\u3059\uFF09\u3068\u5E38\u4F53\uFF08\u3060\u30FB\u3067\u3042\u308B\uFF09\u306E\u6DF7\u5728
+- \u9577\u3059\u304E\u308B\u6BB5\u843D\u3084\u6587\u306E\u5206\u5272\u306E\u691C\u8A0E
 `;
 
 // src/prompts.ts
@@ -57397,7 +57409,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.buildReviewConfig = buildReviewConfig;
 const fs = __importStar(__nccwpck_require__(1943));
 const path_1 = __nccwpck_require__(6928);
-const core_1 = __nccwpck_require__(8469);
+const core_1 = __nccwpck_require__(8381);
 function isObject(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -58004,7 +58016,7 @@ const fs = __importStar(__nccwpck_require__(1943));
 const core = __importStar(__nccwpck_require__(6966));
 const github = __importStar(__nccwpck_require__(4903));
 const glob_1 = __nccwpck_require__(3360);
-const core_1 = __nccwpck_require__(8469);
+const core_1 = __nccwpck_require__(8381);
 const config_1 = __nccwpck_require__(6878);
 const github_1 = __nccwpck_require__(4171);
 async function parseDocument(filePath) {
