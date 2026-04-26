@@ -219,7 +219,13 @@ function formatReviewCommentBody(issue: ReviewIssue): string {
 }
 
 function formatSourceLink(source: NonNullable<ReviewIssue['source']>): string {
-  return source.title ? `[${source.title}](${source.url})` : source.url;
+  if (!source.title) {
+    return source.url;
+  }
+
+  const safeTitle = source.title.replace(/([\\[\]])/g, '\\$1');
+  const safeUrl = `<${source.url.replace(/</g, '%3C').replace(/>/g, '%3E')}>`;
+  return `[${safeTitle}](${safeUrl})`;
 }
 
 function formatReviewSummary(results: ReviewResults): string {

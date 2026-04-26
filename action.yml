@@ -36,7 +36,7 @@ inputs:
     default: 'warning'
 
   fact-check:
-    description: 'Enable fact-checking via web search'
+    description: 'Enable fact-checking via web search (true/false)'
     required: false
 
   fact-check-instruction:

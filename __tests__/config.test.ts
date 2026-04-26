@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { resolve } from 'path';
 import type { ActionInputs } from '../src/inputs';
 
 vi.mock('fs/promises', () => ({
@@ -76,6 +77,10 @@ describe('buildReviewConfig', () => {
 
     await buildReviewConfig(inputs);
 
+    expect(vi.mocked(readFile)).toHaveBeenCalledWith(
+      resolve(process.cwd(), 'fact-check.md'),
+      'utf-8'
+    );
     expect(mocks.createReviewConfigMock).toHaveBeenCalledWith({
       language: 'en',
       llm: { provider: 'openai', apiKey: undefined, model: undefined },
@@ -84,6 +89,28 @@ describe('buildReviewConfig', () => {
         enabled: true,
         instruction: 'Fact-check instruction from input',
       },
+    });
+  });
+
+  it('should not enable fact-check from instruction input alone', async () => {
+    const inputs: ActionInputs = {
+      files: ['test.txt'],
+      provider: 'openai',
+      language: 'en',
+      severity: 'warning',
+      factCheckInstruction: 'fact-check.md',
+      failOnError: false,
+      commentPr: false,
+    };
+
+    await buildReviewConfig(inputs);
+
+    expect(vi.mocked(readFile)).not.toHaveBeenCalled();
+    expect(mocks.createReviewConfigMock).toHaveBeenCalledWith({
+      language: 'en',
+      llm: { provider: 'openai', apiKey: undefined, model: undefined },
+      severityLevel: 'warning',
+      factCheck: undefined,
     });
   });
 
@@ -140,8 +167,10 @@ describe('buildReviewConfig', () => {
     expect(callArg?.llm?.provider).toBe('openai');
     expect(callArg?.llm?.model).toBe('claude-x');
     expect(callArg?.llm?.apiKey).toBe('file-key');
-    expect(callArg?.factCheck?.enabled).toBe(true);
-    expect(callArg?.factCheck?.instruction).toBe('Fact-check instruction from file');
+    expect(callArg?.factCheck).toEqual({
+      enabled: true,
+      instruction: 'Fact-check instruction from file',
+    });
     expect(mocks.validateConfigMock).toHaveBeenCalledTimes(1);
   });
 
@@ -204,5 +233,50 @@ describe('buildReviewConfig', () => {
     const callArg = calls[0]?.[0] as { factCheck?: { enabled?: boolean } } | undefined;
 
     expect(callArg?.factCheck).toEqual({ enabled: false });
+  });
+
+  it('should preserve disabled fact-check from config file', async () => {
+    vi.mocked(readFile).mockImplementation((path) => {
+      const p = String(path);
+      if (p.endsWith('config.json')) {
+        return Promise.resolve(
+          JSON.stringify({
+            factCheck: {
+              enabled: false,
+              instruction: 'Disabled instruction',
+              userLocation: { country: 'JP' },
+            },
+          })
+        );
+      }
+      throw new Error(`Unexpected readFile: ${p}`);
+    });
+
+    const inputs: ActionInputs = {
+      files: ['test.txt'],
+      severity: 'warning',
+      failOnError: false,
+      commentPr: false,
+      config: 'config.json',
+    };
+
+    await buildReviewConfig(inputs);
+
+    const calls = mocks.createReviewConfigMock.mock.calls as Array<[unknown]>;
+    const callArg = calls[0]?.[0] as
+      | {
+          factCheck?: {
+            enabled?: boolean;
+            instruction?: string;
+            userLocation?: { country?: string };
+          };
+        }
+      | undefined;
+
+    expect(callArg?.factCheck).toEqual({
+      enabled: false,
+      instruction: 'Disabled instruction',
+      userLocation: { country: 'JP' },
+    });
   });
 });

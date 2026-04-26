@@ -36,14 +36,11 @@ function getOptionalBooleanInput(name: string): boolean | undefined {
     return undefined;
   }
 
-  if (['true', 'True', 'TRUE'].includes(value)) {
-    return true;
+  try {
+    return core.getBooleanInput(name);
+  } catch {
+    throw new Error(`Invalid boolean value for ${name}: ${value}. Must be true or false`);
   }
-  if (['false', 'False', 'FALSE'].includes(value)) {
-    return false;
-  }
-
-  throw new Error(`Invalid boolean value for ${name}: ${value}. Must be true or false`);
 }
 
 export function getInputs(): ActionInputs {

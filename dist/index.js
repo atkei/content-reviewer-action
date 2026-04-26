@@ -57809,17 +57809,7 @@ async function loadUserConfigFile(configPath) {
             throw new Error(`Failed to read instructionFile "${fileConfig.instructionFile}" from config: ${error instanceof Error ? error.message : String(error)}`);
         }
     }
-    let factCheckInstructionContent;
-    if (fileConfig.factCheck?.instructionFile) {
-        const factCheckInstructionPath = (0, path_1.resolve)(configDir, fileConfig.factCheck.instructionFile);
-        try {
-            factCheckInstructionContent = await fs.readFile(factCheckInstructionPath, 'utf-8');
-        }
-        catch (error) {
-            throw new Error(`Failed to read factCheck.instructionFile "${fileConfig.factCheck.instructionFile}" from config: ${error instanceof Error ? error.message : String(error)}`);
-        }
-    }
-    return { fileConfig, configDir, instructionContent, factCheckInstructionContent };
+    return { fileConfig, configDir, instructionContent };
 }
 async function loadOptionalInputFile(inputPath, label) {
     if (!inputPath) {
@@ -57834,19 +57824,38 @@ async function loadOptionalInputFile(inputPath, label) {
     }
 }
 function buildFactCheckInput(fileFactCheck, inputFactCheck, instruction) {
-    const enabled = inputFactCheck ?? fileFactCheck?.enabled ?? Boolean(instruction);
+    const fileFactCheckInput = fileFactCheck
+        ? {
+            ...(fileFactCheck.userLocation !== undefined
+                ? { userLocation: fileFactCheck.userLocation }
+                : {}),
+            ...(fileFactCheck.instruction !== undefined
+                ? { instruction: fileFactCheck.instruction }
+                : {}),
+            ...(fileFactCheck.enabled !== undefined ? { enabled: fileFactCheck.enabled } : {}),
+        }
+        : undefined;
+    const enabled = inputFactCheck ?? fileFactCheck?.enabled ?? false;
     if (!enabled) {
-        return inputFactCheck === false ? { enabled: false } : undefined;
+        if (inputFactCheck === false) {
+            return { enabled: false };
+        }
+        if (fileFactCheck?.enabled === false) {
+            return { ...fileFactCheckInput, enabled: false };
+        }
+        return undefined;
     }
     return {
-        ...fileFactCheck,
+        ...fileFactCheckInput,
         enabled: true,
-        instruction: instruction ?? fileFactCheck?.instruction,
+        ...(instruction !== undefined ? { instruction } : {}),
     };
 }
 async function buildReviewConfig(inputs) {
-    const inputFactCheckInstruction = await loadOptionalInputFile(inputs.factCheckInstruction, 'fact-check-instruction');
     if (!inputs.config) {
+        const inputFactCheckInstruction = inputs.factCheck === true
+            ? await loadOptionalInputFile(inputs.factCheckInstruction, 'fact-check-instruction')
+            : undefined;
         const config = (0, core_1.createReviewConfig)({
             language: inputs.language,
             llm: {
@@ -57860,8 +57869,23 @@ async function buildReviewConfig(inputs) {
         (0, core_1.validateConfig)(config);
         return config;
     }
-    const { fileConfig, instructionContent, factCheckInstructionContent } = await loadUserConfigFile(inputs.config);
-    const factCheckInstruction = inputFactCheckInstruction ?? factCheckInstructionContent;
+    const { fileConfig, configDir, instructionContent } = await loadUserConfigFile(inputs.config);
+    const factCheckEnabled = inputs.factCheck ?? fileConfig.factCheck?.enabled ?? false;
+    let factCheckInstruction;
+    if (factCheckEnabled) {
+        if (inputs.factCheckInstruction) {
+            factCheckInstruction = await loadOptionalInputFile(inputs.factCheckInstruction, 'fact-check-instruction');
+        }
+        else if (fileConfig.factCheck?.instructionFile) {
+            const factCheckInstructionPath = (0, path_1.resolve)(configDir, fileConfig.factCheck.instructionFile);
+            try {
+                factCheckInstruction = await fs.readFile(factCheckInstructionPath, 'utf-8');
+            }
+            catch (error) {
+                throw new Error(`Failed to read factCheck.instructionFile "${fileConfig.factCheck.instructionFile}" from config: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
+    }
     const config = (0, core_1.createReviewConfig)({
         ...fileConfig,
         instruction: instructionContent ?? fileConfig.instruction,
@@ -58102,7 +58126,12 @@ function formatReviewCommentBody(issue) {
     return body;
 }
 function formatSourceLink(source) {
-    return source.title ? `[${source.title}](${source.url})` : source.url;
+    if (!source.title) {
+        return source.url;
+    }
+    const safeTitle = source.title.replace(/([\\[\]])/g, '\\$1');
+    const safeUrl = `<${source.url.replace(/</g, '%3C').replace(/>/g, '%3E')}>`;
+    return `[${safeTitle}](${safeUrl})`;
 }
 function formatReviewSummary(results) {
     let summary = `${COMMENT_MARKER}\n`;
@@ -58199,13 +58228,12 @@ function getOptionalBooleanInput(name) {
     if (!value) {
         return undefined;
     }
-    if (['true', 'True', 'TRUE'].includes(value)) {
-        return true;
+    try {
+        return core.getBooleanInput(name);
     }
-    if (['false', 'False', 'FALSE'].includes(value)) {
-        return false;
+    catch {
+        throw new Error(`Invalid boolean value for ${name}: ${value}. Must be true or false`);
     }
-    throw new Error(`Invalid boolean value for ${name}: ${value}. Must be true or false`);
 }
 function getInputs() {
     const filesInput = core.getInput('files', { required: true });

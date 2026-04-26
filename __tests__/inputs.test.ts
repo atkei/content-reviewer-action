@@ -80,6 +80,7 @@ describe('getInputs', () => {
       return values[name] || '';
     });
     vi.mocked(core.getBooleanInput).mockImplementation((name) => {
+      if (name === 'fact-check') return true;
       if (name === 'fail-on-error') return true;
       if (name === 'comment-pr') return true;
       return false;
@@ -150,7 +151,12 @@ describe('getInputs', () => {
       if (name === 'fact-check') return 'yes';
       return '';
     });
-    vi.mocked(core.getBooleanInput).mockReturnValue(false);
+    vi.mocked(core.getBooleanInput).mockImplementation((name) => {
+      if (name === 'fact-check') {
+        throw new Error('Input does not meet YAML 1.2 boolean spec');
+      }
+      return false;
+    });
 
     expect(() => getInputs()).toThrow('Invalid boolean value for fact-check: yes');
   });
