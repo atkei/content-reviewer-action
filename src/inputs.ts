@@ -12,6 +12,8 @@ export type ActionInputs = Readonly<{
   language?: Language;
   config?: string;
   severity: Severity;
+  factCheck?: boolean;
+  factCheckInstruction?: string;
   failOnError: boolean;
   commentPr: boolean;
 }>;
@@ -26,6 +28,22 @@ function isValidLanguage(value: string): value is Language {
 
 function isValidSeverity(value: string): value is Severity {
   return ['error', 'warning', 'suggestion'].includes(value);
+}
+
+function getOptionalBooleanInput(name: string): boolean | undefined {
+  const value = core.getInput(name);
+  if (!value) {
+    return undefined;
+  }
+
+  if (['true', 'True', 'TRUE'].includes(value)) {
+    return true;
+  }
+  if (['false', 'False', 'FALSE'].includes(value)) {
+    return false;
+  }
+
+  throw new Error(`Invalid boolean value for ${name}: ${value}. Must be true or false`);
 }
 
 export function getInputs(): ActionInputs {
@@ -76,6 +94,9 @@ export function getInputs(): ActionInputs {
   }
   const severity: Severity = severityRaw;
 
+  const factCheck = getOptionalBooleanInput('fact-check');
+  const factCheckInstruction = core.getInput('fact-check-instruction') || undefined;
+
   const failOnError = core.getBooleanInput('fail-on-error');
   const commentPr = core.getBooleanInput('comment-pr');
 
@@ -87,6 +108,8 @@ export function getInputs(): ActionInputs {
     language,
     config,
     severity,
+    factCheck,
+    factCheckInstruction,
     failOnError,
     commentPr,
   };

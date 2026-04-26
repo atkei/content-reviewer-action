@@ -35,6 +35,14 @@ inputs:
     required: false
     default: 'warning'
 
+  fact-check:
+    description: 'Enable fact-checking via web search'
+    required: false
+
+  fact-check-instruction:
+    description: 'Path to fact-check instruction file'
+    required: false
+
   fail-on-error:
     description: 'Fail the action if errors are found'
     required: false

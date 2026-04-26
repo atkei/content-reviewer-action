@@ -1,5 +1,6 @@
 import * as core from '@actions/core';
 import * as github from '@actions/github';
+import type { ReviewIssue } from '@content-reviewer/core';
 import type { ReviewResults } from './reviewer';
 
 const COMMENT_MARKER = '<!-- content-reviewer-action -->';
@@ -195,11 +196,7 @@ export async function createReviewComment(results: ReviewResults): Promise<void>
   }
 }
 
-function formatReviewCommentBody(issue: {
-  severity: string;
-  message: string;
-  suggestion?: string;
-}): string {
+function formatReviewCommentBody(issue: ReviewIssue): string {
   let icon = '•';
   if (issue.severity === 'error') icon = '❌';
   if (issue.severity === 'warning') icon = '⚠️';
@@ -211,10 +208,18 @@ function formatReviewCommentBody(issue: {
     body += `\n💡 **Suggestion**: ${issue.suggestion}\n`;
   }
 
+  if (issue.source?.url) {
+    body += `\n🔎 **Source**: ${formatSourceLink(issue.source)}\n`;
+  }
+
   body += '\n---\n';
   body += '_Posted by [content-reviewer-action](https://github.com/atkei/content-reviewer-action)_';
 
   return body;
+}
+
+function formatSourceLink(source: NonNullable<ReviewIssue['source']>): string {
+  return source.title ? `[${source.title}](${source.url})` : source.url;
 }
 
 function formatReviewSummary(results: ReviewResults): string {
@@ -243,6 +248,9 @@ function formatReviewSummary(results: ReviewResults): string {
         summary += `${icon} **${issue.severity}**${lineInfo}: ${issue.message}\n`;
         if (issue.suggestion) {
           summary += `   💡 Suggestion: ${issue.suggestion}\n`;
+        }
+        if (issue.source?.url) {
+          summary += `   🔎 Source: ${formatSourceLink(issue.source)}\n`;
         }
         summary += '\n';
       }

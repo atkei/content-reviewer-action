@@ -11,6 +11,15 @@ async function run(): Promise<void> {
     core.info(`Reviewing ${inputs.files.length} file pattern(s)...`);
     core.info(`Provider: ${inputs.provider ?? '(from config/default)'}`);
     core.info(`Language: ${inputs.language ?? '(from config/default)'}`);
+    core.info(
+      `Fact check: ${
+        inputs.factCheck === undefined
+          ? '(from config/default)'
+          : inputs.factCheck
+            ? 'enabled'
+            : 'disabled'
+      }`
+    );
 
     const results = await reviewFiles(inputs);
 

@@ -5,12 +5,16 @@ import {
   validateConfig,
   type ReviewConfigInput,
   type ReviewConfig,
+  type FactCheckConfig,
 } from '@content-reviewer/core';
 import type { ActionInputs } from './inputs';
 
-type UserConfigFile = ReviewConfigInput &
+type UserConfigFile = Omit<ReviewConfigInput, 'factCheck'> &
   Readonly<{
     instructionFile?: string;
+    factCheck?: Partial<FactCheckConfig> & {
+      instructionFile?: string;
+    };
   }>;
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -27,6 +31,7 @@ async function loadUserConfigFile(configPath: string): Promise<{
   fileConfig: UserConfigFile;
   configDir: string;
   instructionContent?: string;
+  factCheckInstructionContent?: string;
 }> {
   const absConfigPath = resolve(process.cwd(), configPath);
   let rawText: string;
@@ -64,10 +69,65 @@ async function loadUserConfigFile(configPath: string): Promise<{
     }
   }
 
-  return { fileConfig, configDir, instructionContent };
+  let factCheckInstructionContent: string | undefined;
+  if (fileConfig.factCheck?.instructionFile) {
+    const factCheckInstructionPath = resolve(configDir, fileConfig.factCheck.instructionFile);
+    try {
+      factCheckInstructionContent = await fs.readFile(factCheckInstructionPath, 'utf-8');
+    } catch (error) {
+      throw new Error(
+        `Failed to read factCheck.instructionFile "${fileConfig.factCheck.instructionFile}" from config: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+    }
+  }
+
+  return { fileConfig, configDir, instructionContent, factCheckInstructionContent };
+}
+
+async function loadOptionalInputFile(
+  inputPath: string | undefined,
+  label: string
+): Promise<string | undefined> {
+  if (!inputPath) {
+    return undefined;
+  }
+
+  const absPath = resolve(process.cwd(), inputPath);
+  try {
+    return await fs.readFile(absPath, 'utf-8');
+  } catch (error) {
+    throw new Error(
+      `Failed to read ${label} "${inputPath}": ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+}
+
+function buildFactCheckInput(
+  fileFactCheck: UserConfigFile['factCheck'] | undefined,
+  inputFactCheck: boolean | undefined,
+  instruction: string | undefined
+): ReviewConfigInput['factCheck'] | undefined {
+  const enabled = inputFactCheck ?? fileFactCheck?.enabled ?? Boolean(instruction);
+
+  if (!enabled) {
+    return inputFactCheck === false ? { enabled: false } : undefined;
+  }
+
+  return {
+    ...fileFactCheck,
+    enabled: true,
+    instruction: instruction ?? fileFactCheck?.instruction,
+  };
 }
 
 export async function buildReviewConfig(inputs: ActionInputs): Promise<ReviewConfig> {
+  const inputFactCheckInstruction = await loadOptionalInputFile(
+    inputs.factCheckInstruction,
+    'fact-check-instruction'
+  );
+
   if (!inputs.config) {
     const config = createReviewConfig({
       language: inputs.language,
@@ -77,12 +137,16 @@ export async function buildReviewConfig(inputs: ActionInputs): Promise<ReviewCon
         model: inputs.model,
       },
       severityLevel: inputs.severity,
+      factCheck: buildFactCheckInput(undefined, inputs.factCheck, inputFactCheckInstruction),
     });
     validateConfig(config);
     return config;
   }
 
-  const { fileConfig, instructionContent } = await loadUserConfigFile(inputs.config);
+  const { fileConfig, instructionContent, factCheckInstructionContent } = await loadUserConfigFile(
+    inputs.config
+  );
+  const factCheckInstruction = inputFactCheckInstruction ?? factCheckInstructionContent;
 
   const config = createReviewConfig({
     ...fileConfig,
@@ -95,6 +159,7 @@ export async function buildReviewConfig(inputs: ActionInputs): Promise<ReviewCon
       model: inputs.model ?? fileConfig.llm?.model,
     },
     severityLevel: inputs.severity ?? fileConfig.severityLevel,
+    factCheck: buildFactCheckInput(fileConfig.factCheck, inputs.factCheck, factCheckInstruction),
   });
 
   validateConfig(config);

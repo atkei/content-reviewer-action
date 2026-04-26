@@ -27,6 +27,7 @@ describe('buildReviewConfig', () => {
       ...(input as object),
       llm: { provider: 'openai', model: 'gpt-4.1-mini' },
       language: 'en',
+      factCheck: { enabled: false },
     }));
   });
 
@@ -48,8 +49,42 @@ describe('buildReviewConfig', () => {
       language: 'en',
       llm: { provider: 'openai', apiKey: 'k', model: 'm' },
       severityLevel: 'warning',
+      factCheck: undefined,
     });
     expect(mocks.validateConfigMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('should pass fact-check inputs when config is not provided', async () => {
+    vi.mocked(readFile).mockImplementation((path) => {
+      const p = String(path);
+      if (p.endsWith('fact-check.md')) {
+        return Promise.resolve('Fact-check instruction from input');
+      }
+      throw new Error(`Unexpected readFile: ${p}`);
+    });
+
+    const inputs: ActionInputs = {
+      files: ['test.txt'],
+      provider: 'openai',
+      language: 'en',
+      severity: 'warning',
+      factCheck: true,
+      factCheckInstruction: 'fact-check.md',
+      failOnError: false,
+      commentPr: false,
+    };
+
+    await buildReviewConfig(inputs);
+
+    expect(mocks.createReviewConfigMock).toHaveBeenCalledWith({
+      language: 'en',
+      llm: { provider: 'openai', apiKey: undefined, model: undefined },
+      severityLevel: 'warning',
+      factCheck: {
+        enabled: true,
+        instruction: 'Fact-check instruction from input',
+      },
+    });
   });
 
   it('should load JSON config file and merge with inputs (inputs win)', async () => {
@@ -61,11 +96,18 @@ describe('buildReviewConfig', () => {
             language: 'ja',
             llm: { provider: 'anthropic', model: 'claude-x', apiKey: 'file-key' },
             instructionFile: 'instr.txt',
+            factCheck: {
+              enabled: true,
+              instructionFile: 'fact-check.txt',
+            },
           })
         );
       }
       if (p.endsWith('instr.txt')) {
         return Promise.resolve('Instruction from file');
+      }
+      if (p.endsWith('fact-check.txt')) {
+        return Promise.resolve('Fact-check instruction from file');
       }
       throw new Error(`Unexpected readFile: ${p}`);
     });
@@ -89,6 +131,7 @@ describe('buildReviewConfig', () => {
           instruction?: string;
           language?: string;
           llm?: { provider?: string; model?: string; apiKey?: string };
+          factCheck?: { enabled?: boolean; instruction?: string };
         }
       | undefined;
 
@@ -97,6 +140,8 @@ describe('buildReviewConfig', () => {
     expect(callArg?.llm?.provider).toBe('openai');
     expect(callArg?.llm?.model).toBe('claude-x');
     expect(callArg?.llm?.apiKey).toBe('file-key');
+    expect(callArg?.factCheck?.enabled).toBe(true);
+    expect(callArg?.factCheck?.instruction).toBe('Fact-check instruction from file');
     expect(mocks.validateConfigMock).toHaveBeenCalledTimes(1);
   });
 
@@ -129,5 +174,35 @@ describe('buildReviewConfig', () => {
 
     expect(callArg?.language).toBe('ja');
     expect(callArg?.llm?.provider).toBe('anthropic');
+  });
+
+  it('should allow action input to disable fact-check from config file', async () => {
+    vi.mocked(readFile).mockImplementation((path) => {
+      const p = String(path);
+      if (p.endsWith('config.json')) {
+        return Promise.resolve(
+          JSON.stringify({
+            factCheck: { enabled: true, instruction: 'From config' },
+          })
+        );
+      }
+      throw new Error(`Unexpected readFile: ${p}`);
+    });
+
+    const inputs: ActionInputs = {
+      files: ['test.txt'],
+      severity: 'warning',
+      factCheck: false,
+      failOnError: false,
+      commentPr: false,
+      config: 'config.json',
+    };
+
+    await buildReviewConfig(inputs);
+
+    const calls = mocks.createReviewConfigMock.mock.calls as Array<[unknown]>;
+    const callArg = calls[0]?.[0] as { factCheck?: { enabled?: boolean } } | undefined;
+
+    expect(callArg?.factCheck).toEqual({ enabled: false });
   });
 });
