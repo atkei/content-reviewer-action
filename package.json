@@ -1,6 +1,6 @@
 {
   "name": "content-reviewer-action",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "GitHub Action for LLM-powered content review",
   "main": "dist/index.js",
   "scripts": {
@@ -32,7 +32,7 @@
   "dependencies": {
     "@actions/core": "^1.11.1",
     "@actions/github": "^6.0.1",
-    "@content-reviewer/core": "^0.0.6",
+    "@content-reviewer/core": "^0.1.0",
     "glob": "^10.5.0"
   },
   "devDependencies": {

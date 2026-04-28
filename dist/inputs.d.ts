@@ -9,6 +9,8 @@ export type ActionInputs = Readonly<{
     language?: Language;
     config?: string;
     severity: Severity;
+    factCheck?: boolean;
+    factCheckInstruction?: string;
     failOnError: boolean;
     commentPr: boolean;
 }>;

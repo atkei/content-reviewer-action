@@ -25,6 +25,7 @@ vi.mock('@content-reviewer/core', () => {
     createReviewConfig: vi.fn().mockReturnValue({
       language: 'en',
       llm: { provider: 'openai', model: 'gpt-4.1-mini' },
+      factCheck: { enabled: false },
     }),
     validateConfig: vi.fn(),
   };

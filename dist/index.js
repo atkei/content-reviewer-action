@@ -17235,7 +17235,7 @@ function isJSONObject(value) {
 
 /***/ }),
 
-/***/ 8381:
+/***/ 1933:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 "use strict";
@@ -17265,6 +17265,9 @@ __export(index_exports, {
   ContentReviewer: () => ContentReviewer,
   ContentReviewerError: () => ContentReviewerError,
   DEFAULT_CONFIG: () => DEFAULT_CONFIG,
+  DEFAULT_FACT_CHECK_CONFIG: () => DEFAULT_FACT_CHECK_CONFIG,
+  DEFAULT_FACT_CHECK_INSTRUCTION_EN: () => DEFAULT_FACT_CHECK_INSTRUCTION_EN,
+  DEFAULT_FACT_CHECK_INSTRUCTION_JA: () => DEFAULT_FACT_CHECK_INSTRUCTION_JA,
   DEFAULT_INSTRUCTION_EN: () => DEFAULT_INSTRUCTION_EN,
   DEFAULT_INSTRUCTION_JA: () => DEFAULT_INSTRUCTION_JA,
   DEFAULT_LLM_CONFIG: () => DEFAULT_LLM_CONFIG,
@@ -17272,11 +17275,15 @@ __export(index_exports, {
   ENV_VARS: () => ENV_VARS,
   LLMError: () => LLMError,
   MissingApiKeyError: () => MissingApiKeyError,
+  MissingFactCheckInstructionError: () => MissingFactCheckInstructionError,
+  MissingFactCheckToolsError: () => MissingFactCheckToolsError,
   PROVIDER_DEFAULT_MODELS: () => PROVIDER_DEFAULT_MODELS,
   SEVERITY_LEVELS: () => SEVERITY_LEVELS,
   UnsupportedProviderError: () => UnsupportedProviderError,
   createLLMClient: () => createLLMClient,
   createReviewConfig: () => createReviewConfig,
+  factCheckClaimSchema: () => factCheckClaimSchema,
+  factCheckPlanSchema: () => factCheckPlanSchema,
   filterIssuesBySeverity: () => filterIssuesBySeverity,
   resolveApiKey: () => resolveApiKey,
   reviewIssueSchema: () => reviewIssueSchema,
@@ -17285,8 +17292,23 @@ __export(index_exports, {
 });
 module.exports = __toCommonJS(index_exports);
 
-// src/schemas.ts
+// src/fact-check/schema.ts
 var import_zod = __nccwpck_require__(8661);
+var factCheckClaimSchema = import_zod.z.object({
+  id: import_zod.z.string(),
+  text: import_zod.z.string()
+});
+var factCheckPlanSchema = import_zod.z.object({
+  claims: import_zod.z.array(factCheckClaimSchema)
+});
+function formatClaimsForPrompt(claims) {
+  const lineBreak = `
+`;
+  return claims.map((c) => `- ${c.id}: ${c.text}`).join(lineBreak);
+}
+
+// src/review/schemas.ts
+var import_zod2 = __nccwpck_require__(8661);
 
 // src/severity.ts
 var SEVERITIES = {
@@ -17300,17 +17322,21 @@ var SEVERITY_LEVELS = Object.fromEntries(
 );
 var DEFAULT_SEVERITY_LEVEL = DEFAULT;
 
-// src/schemas.ts
+// src/review/schemas.ts
 var severityKeys = Object.keys(SEVERITY_LEVELS);
-var reviewIssueSchema = import_zod.z.object({
-  severity: import_zod.z.enum(severityKeys),
-  message: import_zod.z.string(),
-  matchText: import_zod.z.string().optional(),
-  lineNumber: import_zod.z.number().optional(),
-  suggestion: import_zod.z.string().optional()
+var reviewIssueSchema = import_zod2.z.object({
+  severity: import_zod2.z.enum(severityKeys),
+  message: import_zod2.z.string(),
+  matchText: import_zod2.z.string().optional(),
+  lineNumber: import_zod2.z.number().optional(),
+  suggestion: import_zod2.z.string().optional(),
+  source: import_zod2.z.object({
+    url: import_zod2.z.string().url(),
+    title: import_zod2.z.string().optional()
+  }).optional()
 });
-var reviewResponseSchema = import_zod.z.object({
-  issues: import_zod.z.array(reviewIssueSchema)
+var reviewResponseSchema = import_zod2.z.object({
+  issues: import_zod2.z.array(reviewIssueSchema)
 });
 
 // src/constants.ts
@@ -17348,6 +17374,18 @@ var MissingApiKeyError = class extends ContentReviewerError {
     this.name = "MissingApiKeyError";
   }
 };
+var MissingFactCheckInstructionError = class extends ContentReviewerError {
+  constructor() {
+    super("factCheckInstruction is required when fact-checking is enabled.");
+    this.name = "MissingFactCheckInstructionError";
+  }
+};
+var MissingFactCheckToolsError = class extends ContentReviewerError {
+  constructor() {
+    super("Fact-check tools are unavailable for the selected provider.");
+    this.name = "MissingFactCheckToolsError";
+  }
+};
 
 // src/config.ts
 var PROVIDER_DEFAULT_MODELS = {
@@ -17359,22 +17397,34 @@ var DEFAULT_LLM_CONFIG = {
   provider: "openai",
   model: PROVIDER_DEFAULT_MODELS.openai
 };
+var DEFAULT_FACT_CHECK_CONFIG = {
+  enabled: false
+};
 var DEFAULT_CONFIG = {
   language: "en",
-  llm: DEFAULT_LLM_CONFIG
+  llm: DEFAULT_LLM_CONFIG,
+  factCheck: DEFAULT_FACT_CHECK_CONFIG
 };
 function createReviewConfig(input = {}) {
   const provider = input.llm?.provider ?? DEFAULT_LLM_CONFIG.provider;
   const model = input.llm?.model ?? PROVIDER_DEFAULT_MODELS[provider];
+  const language = input.language ?? DEFAULT_CONFIG.language;
+  const factCheckEnabled = Boolean(input.factCheck?.enabled);
+  const factCheckUserLocation = factCheckEnabled && language === "ja" ? input.factCheck?.userLocation ?? { country: "JP" } : input.factCheck?.userLocation;
   return {
     instruction: input.instruction,
-    language: input.language ?? DEFAULT_CONFIG.language,
+    language,
     llm: {
       provider,
       model,
       apiKey: input.llm?.apiKey
     },
-    severityLevel: input.severityLevel
+    severityLevel: input.severityLevel,
+    factCheck: factCheckEnabled ? {
+      enabled: true,
+      userLocation: factCheckUserLocation,
+      instruction: input.factCheck?.instruction
+    } : DEFAULT_FACT_CHECK_CONFIG
   };
 }
 function resolveApiKey(config) {
@@ -17418,25 +17468,201 @@ function validateConfig(config) {
 }
 
 // src/llm/ai-sdk-client.ts
+var import_ai3 = __nccwpck_require__(6308);
+
+// src/fact-check/plan.ts
 var import_ai = __nccwpck_require__(6308);
-var import_openai = __nccwpck_require__(9253);
+
+// src/fact-check/prompts.ts
+function buildFactCheckPlanPrompt(factCheckInstruction) {
+  return `${factCheckInstruction.trim()}
+
+## Task
+Based on the verification criteria above, extract claims from the content that need to be verified.
+
+## Output Format
+Return JSON only:
+{
+  "claims": [
+    { "id": "C1", "text": "claim text" },
+    { "id": "C2", "text": "claim text" }
+  ]
+}
+
+Rules:
+- Include only claims that can be verified via web sources.
+- Use the original language of the content.
+- Keep claim text concise and specific.
+- If there are no verifiable claims, return { "claims": [] }.
+`;
+}
+function buildFactCheckPrompt(factCheckInstruction, claims, userPrompt, asOf) {
+  const system = `${factCheckInstruction.trim()}
+
+Reference date: ${asOf}
+
+## Task
+Verify each claim using web search and report your findings.
+
+## Output (strict Markdown format)
+Use the exact format below for each claim. Do not add extra sections or text.
+Do not use bold, italics, inline code, or code fences. Use plain text only.
+
+Format:
+### Claim <ID>
+Claim: <claim text>
+Status: verified | contradicted | uncertain
+Rationale: <1-3 short sentences, cite evidence from web search>
+Sources:
+- <url>
+- <url>
+
+Rules:
+- Keep one blank line between claims.
+- If no sources, write "Sources:" followed by "- none".
+- Do not invent URLs. Base verification on web search evidence, not prior knowledge.`;
+  const prompt = `Claims to verify:
+${formatClaimsForPrompt(claims)}
+
+Content:
+${userPrompt}`;
+  return { system, prompt };
+}
+function buildReviewPromptWithFactCheck(originalPrompt, factCheckResult, asOf) {
+  return `## Fact-Check Results (for reference)
+${factCheckResult}
+
+## Content to Review
+${originalPrompt}
+
+Reference date: ${asOf}
+
+Consider the fact-check results above when generating your review.`;
+}
+
+// src/fact-check/plan.ts
+async function generateFactCheckPlan(model, userPrompt, factCheckInstruction) {
+  const systemPrompt = buildFactCheckPlanPrompt(factCheckInstruction);
+  try {
+    const { object } = await (0, import_ai.generateObject)({
+      model,
+      schema: factCheckPlanSchema,
+      system: systemPrompt,
+      prompt: userPrompt
+    });
+    return object.claims ?? [];
+  } catch {
+    return [];
+  }
+}
+
+// src/fact-check/run.ts
+var import_ai2 = __nccwpck_require__(6308);
+async function runFactCheck(model, tools, system, prompt) {
+  const { text } = await (0, import_ai2.generateText)({
+    model,
+    system,
+    prompt,
+    tools,
+    toolChoice: "required"
+  });
+  return text;
+}
+
+// src/llm/providers/anthropic.ts
 var import_anthropic = __nccwpck_require__(504);
+var anthropicAdapter = {
+  createModel: (apiKey, model) => {
+    const anthropic = (0, import_anthropic.createAnthropic)({ apiKey });
+    return anthropic(model);
+  },
+  createTools: (apiKey, factCheckConfig) => {
+    if (!factCheckConfig.enabled) {
+      return void 0;
+    }
+    const anthropic = (0, import_anthropic.createAnthropic)({ apiKey });
+    const location = factCheckConfig.userLocation ? { type: "approximate", ...factCheckConfig.userLocation } : void 0;
+    return {
+      web_search: anthropic.tools.webSearch_20250305({
+        userLocation: location
+      })
+    };
+  }
+};
+
+// src/llm/providers/google.ts
 var import_google = __nccwpck_require__(9529);
+var googleAdapter = {
+  createModel: (apiKey, model) => {
+    const google = (0, import_google.createGoogleGenerativeAI)({ apiKey });
+    return google(model);
+  },
+  createTools: (apiKey, factCheckConfig) => {
+    if (!factCheckConfig.enabled) {
+      return void 0;
+    }
+    const google = (0, import_google.createGoogleGenerativeAI)({ apiKey });
+    return {
+      google_search: google.tools.googleSearch({})
+    };
+  }
+};
+
+// src/llm/providers/openai.ts
+var import_openai = __nccwpck_require__(9253);
+var openAIAdapter = {
+  createModel: (apiKey, model) => {
+    const openai = (0, import_openai.createOpenAI)({ apiKey });
+    return openai(model);
+  },
+  createTools: (apiKey, factCheckConfig) => {
+    if (!factCheckConfig.enabled) {
+      return void 0;
+    }
+    const openai = (0, import_openai.createOpenAI)({ apiKey });
+    const location = factCheckConfig.userLocation ? { type: "approximate", ...factCheckConfig.userLocation } : void 0;
+    return {
+      web_search: openai.tools.webSearch({
+        userLocation: location
+      })
+    };
+  }
+};
+
+// src/llm/providers/index.ts
+function getProviderAdapter(provider) {
+  switch (provider) {
+    case "openai":
+      return openAIAdapter;
+    case "anthropic":
+      return anthropicAdapter;
+    case "google":
+      return googleAdapter;
+    default:
+      throw new UnsupportedProviderError(provider);
+  }
+}
+
+// src/llm/ai-sdk-client.ts
 var AISdkClient = class {
-  constructor(config, apiKey) {
+  constructor(config, apiKey, factCheckConfig) {
     this.config = config;
     this.apiKey = apiKey;
+    this.factCheckConfig = factCheckConfig;
   }
+  providerAdapter;
   async generateReview(systemPrompt, userPrompt) {
     try {
       const model = this.createModel();
-      const { object } = await (0, import_ai.generateObject)({
+      const { object } = await (0, import_ai3.generateObject)({
         model,
         schema: reviewResponseSchema,
         system: systemPrompt,
         prompt: userPrompt
       });
-      return object;
+      return {
+        issues: object.issues
+      };
     } catch (error) {
       if (error instanceof ContentReviewerError) {
         throw error;
@@ -17447,36 +17673,60 @@ var AISdkClient = class {
       throw new LLMError("AI SDK request failed with unknown error", error);
     }
   }
-  createModel() {
-    const { provider, model } = this.config;
-    switch (provider) {
-      case "openai": {
-        const openai = (0, import_openai.createOpenAI)({
-          apiKey: this.apiKey
-        });
-        return openai(model);
+  supportsFactCheck() {
+    return Boolean(this.createFactCheckTools());
+  }
+  async generateFactCheckPlan(userPrompt, factCheckInstruction) {
+    try {
+      const model = this.createModel();
+      return await generateFactCheckPlan(model, userPrompt, factCheckInstruction);
+    } catch (error) {
+      if (error instanceof ContentReviewerError) {
+        throw error;
       }
-      case "anthropic": {
-        const anthropic = (0, import_anthropic.createAnthropic)({
-          apiKey: this.apiKey
-        });
-        return anthropic(model);
+      if (error instanceof Error) {
+        throw new LLMError(`AI SDK request failed: ${error.message}`, error);
       }
-      case "google": {
-        const google = (0, import_google.createGoogleGenerativeAI)({
-          apiKey: this.apiKey
-        });
-        return google(model);
-      }
-      default:
-        throw new UnsupportedProviderError(provider);
+      throw new LLMError("AI SDK request failed with unknown error", error);
     }
+  }
+  async runFactCheck(systemPrompt, prompt) {
+    try {
+      const tools = this.createFactCheckTools();
+      if (!tools) {
+        throw new MissingFactCheckToolsError();
+      }
+      const model = this.createModel();
+      return await runFactCheck(model, tools, systemPrompt, prompt);
+    } catch (error) {
+      if (error instanceof ContentReviewerError) {
+        throw error;
+      }
+      if (error instanceof Error) {
+        throw new LLMError(`AI SDK request failed: ${error.message}`, error);
+      }
+      throw new LLMError("AI SDK request failed with unknown error", error);
+    }
+  }
+  getProviderAdapter() {
+    if (!this.providerAdapter) {
+      this.providerAdapter = getProviderAdapter(this.config.provider);
+    }
+    return this.providerAdapter;
+  }
+  createModel() {
+    const providerAdapter = this.getProviderAdapter();
+    return providerAdapter.createModel(this.apiKey, this.config.model);
+  }
+  createFactCheckTools() {
+    const providerAdapter = this.getProviderAdapter();
+    return providerAdapter.createTools(this.apiKey, this.factCheckConfig);
   }
 };
 
 // src/llm/index.ts
-function createLLMClient(config, apiKey) {
-  return new AISdkClient(config, apiKey);
+function createLLMClient(config, apiKey, factCheckConfig) {
+  return new AISdkClient(config, apiKey, factCheckConfig);
 }
 
 // src/default-instructions.ts
@@ -17540,12 +17790,68 @@ var DEFAULT_INSTRUCTION_JA = `\u3042\u306A\u305F\u306F\u6280\u8853\u6587\u66F8\u
 - \u656C\u4F53\uFF08\u3067\u3059\u30FB\u307E\u3059\uFF09\u3068\u5E38\u4F53\uFF08\u3060\u30FB\u3067\u3042\u308B\uFF09\u306E\u6DF7\u5728
 - \u9577\u3059\u304E\u308B\u6BB5\u843D\u3084\u6587\u306E\u5206\u5272\u306E\u691C\u8A0E
 `;
+var DEFAULT_FACT_CHECK_INSTRUCTION_EN = `You are a technical content verifier. Your task is to verify technical claims in the provided content using web search.
 
-// src/prompts.ts
+## What to Verify
+- Technology names, libraries, and frameworks mentioned
+- Version numbers and release dates
+- API specifications and function signatures
+- Compatibility claims (e.g., "works with Node.js 20+")
+- URLs and external references
+
+## How to Verify
+1. Identify ALL technical claims that need verification
+2. Perform MULTIPLE web searches - one for each distinct claim or topic
+3. Use specific search queries (e.g., "AWS IAM userId format", "Node.js 20 compatibility")
+4. Compare claims with official documentation
+5. Note any discrepancies, outdated information, or errors
+
+IMPORTANT: Do NOT rely on a single search. Perform separate searches for each technical topic to ensure thorough verification.
+
+## Output Format
+Provide a summary of your findings:
+- List verified claims with sources
+- List any errors or inaccuracies found
+- List claims that could not be verified
+`;
+var DEFAULT_FACT_CHECK_INSTRUCTION_JA = `\u3042\u306A\u305F\u306F\u6280\u8853\u30B3\u30F3\u30C6\u30F3\u30C4\u306E\u691C\u8A3C\u8005\u3067\u3059\u3002Web\u30B5\u30FC\u30C1\u3092\u4F7F\u7528\u3057\u3066\u3001\u63D0\u4F9B\u3055\u308C\u305F\u30B3\u30F3\u30C6\u30F3\u30C4\u5185\u306E\u6280\u8853\u7684\u306A\u4E3B\u5F35\u3092\u691C\u8A3C\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+
+## \u691C\u8A3C\u5BFE\u8C61
+- \u8A18\u8F09\u3055\u308C\u3066\u3044\u308B\u6280\u8853\u540D\u3001\u30E9\u30A4\u30D6\u30E9\u30EA\u3001\u30D5\u30EC\u30FC\u30E0\u30EF\u30FC\u30AF
+- \u30D0\u30FC\u30B8\u30E7\u30F3\u756A\u53F7\u3068\u30EA\u30EA\u30FC\u30B9\u65E5
+- API\u4ED5\u69D8\u3068\u95A2\u6570\u30B7\u30B0\u30CD\u30C1\u30E3
+- \u4E92\u63DB\u6027\u306B\u95A2\u3059\u308B\u4E3B\u5F35\uFF08\u4F8B\uFF1A\u300CNode.js 20+\u3067\u52D5\u4F5C\u300D\uFF09
+- URL\u3068\u5916\u90E8\u53C2\u7167
+
+## \u691C\u8A3C\u65B9\u6CD5
+1. \u691C\u8A3C\u304C\u5FC5\u8981\u306A\u6280\u8853\u7684\u4E3B\u5F35\u3092\u5168\u3066\u7279\u5B9A\u3059\u308B
+2. \u8907\u6570\u56DE\u306EWeb\u30B5\u30FC\u30C1\u3092\u5B9F\u884C\u3059\u308B - \u5404\u4E3B\u5F35\u3084\u30C8\u30D4\u30C3\u30AF\u3054\u3068\u306B\u500B\u5225\u306B\u691C\u7D22
+3. \u5177\u4F53\u7684\u306A\u691C\u7D22\u30AF\u30A8\u30EA\u3092\u4F7F\u7528\u3059\u308B\uFF08\u4F8B\uFF1A\u300CAWS IAM userId \u5F62\u5F0F\u300D\u300CNode.js 20 \u4E92\u63DB\u6027\u300D\uFF09
+4. \u516C\u5F0F\u30C9\u30AD\u30E5\u30E1\u30F3\u30C8\u3068\u4E3B\u5F35\u3092\u6BD4\u8F03
+5. \u4E0D\u4E00\u81F4\u3001\u53E4\u3044\u60C5\u5831\u3001\u30A8\u30E9\u30FC\u3092\u8A18\u9332
+
+\u91CD\u8981\uFF1A1\u56DE\u306E\u691C\u7D22\u306B\u983C\u3089\u306A\u3044\u3067\u304F\u3060\u3055\u3044\u3002\u5FB9\u5E95\u7684\u306A\u691C\u8A3C\u306E\u305F\u3081\u3001\u6280\u8853\u30C8\u30D4\u30C3\u30AF\u3054\u3068\u306B\u500B\u5225\u306E\u691C\u7D22\u3092\u5B9F\u884C\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+
+## \u51FA\u529B\u5F62\u5F0F
+\u691C\u8A3C\u7D50\u679C\u306E\u30B5\u30DE\u30EA\u30FC\u3092\u63D0\u4F9B:
+- \u60C5\u5831\u6E90\u3068\u3068\u3082\u306B\u691C\u8A3C\u6E08\u307F\u306E\u4E3B\u5F35\u3092\u30EA\u30B9\u30C8
+- \u767A\u898B\u3057\u305F\u30A8\u30E9\u30FC\u3084\u4E0D\u6B63\u78BA\u306A\u60C5\u5831\u3092\u30EA\u30B9\u30C8
+- \u691C\u8A3C\u3067\u304D\u306A\u304B\u3063\u305F\u4E3B\u5F35\u3092\u30EA\u30B9\u30C8
+`;
+
+// src/review/prompts.ts
 var allPrompts = {
   ja: {
-    buildSystemPrompt: ({ instruction }) => {
-      const instructions = (instruction || DEFAULT_INSTRUCTION_JA).trimEnd() + "\n";
+    buildSystemPrompt: ({ instruction, factCheckEnabled, asOf }) => {
+      const instructions = `${(instruction || DEFAULT_INSTRUCTION_JA).trimEnd()}
+`;
+      const factCheckNote = factCheckEnabled && asOf ? `
+\u8FFD\u52A0\u30EB\u30FC\u30EB:
+- \u30D5\u30A1\u30AF\u30C8\u30C1\u30A7\u30C3\u30AF\u7D50\u679C\u3067\u300Ccontradicted\u300D\u3068\u3055\u308C\u305F\u5185\u5BB9\u306E\u307F\u3092\u6280\u8853\u7684\u8AA4\u308A\u3068\u3057\u3066\u6307\u6458\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+- \u30D5\u30A1\u30AF\u30C8\u30C1\u30A7\u30C3\u30AF\u7D50\u679C\u306B\u57FA\u3065\u304F\u6307\u6458\u306B\u306F source.url \u3092\u4ED8\u3051\u3066\u304F\u3060\u3055\u3044\u3002
+- \u300C\u73FE\u5728\u300D\u300C\u6700\u65B0\u300D\u306A\u3069\u306E\u8868\u73FE\u3092\u4F7F\u3046\u5834\u5408\u306F ${asOf} \u6642\u70B9\u3067\u3042\u308B\u3053\u3068\u3092\u660E\u8A18\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+- \u672C\u6587\u306B\u5B58\u5728\u3059\u308B\u60C5\u5831\u3092\u300C\u672A\u8A18\u8F09\u300D\u3068\u3057\u3066\u6307\u6458\u3057\u306A\u3044\u3067\u304F\u3060\u3055\u3044\u3002
+` : "";
       return `${instructions}
 \u30EC\u30D3\u30E5\u30FC\u7D50\u679C\u306F\u65E5\u672C\u8A9E\u3067\u3001\u4EE5\u4E0B\u306EJSON\u69CB\u9020\u3067\u8FD4\u3057\u3066\u304F\u3060\u3055\u3044\uFF1A
 - issues: \u898B\u3064\u304B\u3063\u305F\u554F\u984C\u70B9\u306E\u914D\u5217
@@ -17561,13 +17867,25 @@ var allPrompts = {
 - \u6709\u52B9\u306AJSON\u306E\u307F\u3092\u8FD4\u3057\u3066\u304F\u3060\u3055\u3044\uFF08\u524D\u5F8C\u306B\u6587\u7AE0\u3084Markdown\u306E\u30B3\u30FC\u30C9\u30D6\u30ED\u30C3\u30AF\u7B49\u3092\u4ED8\u3051\u306A\u3044\u3067\u304F\u3060\u3055\u3044\uFF09\u3002
 - lineNumber\u306F\u4E0D\u8981\u3067\u3059\u3002matchText\u306E\u307F\u3092\u63D0\u4F9B\u3057\u3066\u304F\u3060\u3055\u3044\u3002
 - \u5EFA\u8A2D\u7684\u3067\u5177\u4F53\u7684\u306A\u30D5\u30A3\u30FC\u30C9\u30D0\u30C3\u30AF\u3092\u63D0\u4F9B\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+${factCheckNote}
 `;
     },
-    buildUserPrompt: () => "\u4EE5\u4E0B\u306E\u30C6\u30AD\u30B9\u30C8\u3092\u30EC\u30D3\u30E5\u30FC\u3057\u3066\u304F\u3060\u3055\u3044\uFF1A\n\n\n"
+    buildUserPrompt: () => `\u4EE5\u4E0B\u306E\u30C6\u30AD\u30B9\u30C8\u3092\u30EC\u30D3\u30E5\u30FC\u3057\u3066\u304F\u3060\u3055\u3044\uFF1A
+
+
+`
   },
   en: {
-    buildSystemPrompt: ({ instruction }) => {
-      const instructions = (instruction || DEFAULT_INSTRUCTION_EN).trimEnd() + "\n";
+    buildSystemPrompt: ({ instruction, factCheckEnabled, asOf }) => {
+      const instructions = `${(instruction || DEFAULT_INSTRUCTION_EN).trimEnd()}
+`;
+      const factCheckNote = factCheckEnabled && asOf ? `
+Additional rules:
+- Only report factual inaccuracies if they are contradicted in the fact-check results.
+- If an issue is based on fact-check results, include source.url.
+- If you use "current" or "latest", state it as of ${asOf}.
+- Do not claim something is missing when it appears in the content.
+` : "";
       return `${instructions}
 Provide the review results in English with the following JSON structure:
 - issues: Array of found issues
@@ -17583,9 +17901,13 @@ Note:
 - Return valid JSON only (do not wrap in markdown code fences or add extra text).
 - Do not provide lineNumber. Only provide matchText.
 - Provide constructive and specific feedback.
+${factCheckNote}
 `;
     },
-    buildUserPrompt: () => "Please review the following text:\n\n\n"
+    buildUserPrompt: () => `Please review the following text:
+
+
+`
   }
 };
 function getLanguagePrompts(language) {
@@ -17601,42 +17923,82 @@ function filterIssuesBySeverity(issues, minLevel) {
   return issues.filter((issue) => SEVERITY_LEVELS[issue.severity] >= minLevelValue);
 }
 
-// src/reviewer.ts
+// src/review/reviewer.ts
 var ContentReviewer = class {
   constructor(config) {
     this.config = config;
   }
   async review(document) {
-    const llmResult = await this.runLLMReview(document);
+    const reviewedAt = /* @__PURE__ */ new Date();
+    const llmResult = await this.runLLMReview(document, reviewedAt);
     const issues = this.config.severityLevel ? filterIssuesBySeverity(llmResult.issues, this.config.severityLevel) : llmResult.issues;
     return {
       source: document.source,
       issues,
-      reviewedAt: /* @__PURE__ */ new Date()
+      reviewedAt
     };
   }
-  async runLLMReview(document) {
+  async runLLMReview(document, reviewedAt) {
     const apiKey = resolveApiKey(this.config);
-    const llmClient = createLLMClient(this.config.llm, apiKey);
-    const systemPrompt = this.buildSystemPrompt();
+    const llmClient = createLLMClient(this.config.llm, apiKey, this.config.factCheck);
+    const asOf = reviewedAt.toISOString().slice(0, 10);
     const userPrompt = this.buildUserPrompt(document);
-    const reviewData = await llmClient.generateReview(systemPrompt, userPrompt);
+    let factCheckApplied = false;
+    let reviewPrompt = userPrompt;
+    if (this.config.factCheck.enabled) {
+      const factCheckInstruction = this.buildFactCheckInstruction(asOf);
+      if (factCheckInstruction && llmClient.supportsFactCheck()) {
+        const claims = await llmClient.generateFactCheckPlan(userPrompt, factCheckInstruction);
+        if (claims.length > 0) {
+          const { system, prompt } = buildFactCheckPrompt(
+            factCheckInstruction,
+            claims,
+            userPrompt,
+            asOf
+          );
+          const factCheckResult = await llmClient.runFactCheck(system, prompt);
+          reviewPrompt = buildReviewPromptWithFactCheck(userPrompt, factCheckResult, asOf);
+          factCheckApplied = true;
+        }
+      }
+    }
+    const systemPrompt = this.buildSystemPrompt(asOf, factCheckApplied);
+    const reviewData = await llmClient.generateReview(systemPrompt, reviewPrompt);
     const issues = reviewData.issues.map((issue) => ({
       ...issue,
       lineNumber: issue.matchText ? this.findFirstMatchingLineNumber(document.rawContent, issue.matchText) : void 0
     }));
     return { issues };
   }
-  buildSystemPrompt() {
+  buildSystemPrompt(asOf, factCheckApplied) {
     const { instruction, language } = this.config;
     const { buildSystemPrompt } = getLanguagePrompts(language);
-    return buildSystemPrompt({ instruction });
+    return buildSystemPrompt({
+      instruction,
+      factCheckEnabled: factCheckApplied,
+      asOf
+    });
   }
   buildUserPrompt(document) {
     const { language } = this.config;
     const { buildUserPrompt } = getLanguagePrompts(language);
     const prompt = buildUserPrompt();
     return prompt + document.rawContent;
+  }
+  buildFactCheckInstruction(asOf) {
+    if (!this.config.factCheck.enabled) {
+      return void 0;
+    }
+    const { language, factCheck } = this.config;
+    const baseInstruction = factCheck.instruction ? factCheck.instruction : language === "ja" ? DEFAULT_FACT_CHECK_INSTRUCTION_JA : DEFAULT_FACT_CHECK_INSTRUCTION_EN;
+    const rules = language === "ja" ? `\u8FFD\u52A0\u30EB\u30FC\u30EB:
+- \u53C2\u7167\u65E5\u6642\u306F ${asOf} \u3067\u3059\u3002\u300C\u73FE\u5728\u300D\u3084\u300C\u6700\u65B0\u300D\u306B\u8A00\u53CA\u3059\u308B\u5834\u5408\u306F\u3053\u306E\u65E5\u4ED8\u3092\u660E\u8A18\u3057\u3066\u304F\u3060\u3055\u3044\u3002
+- \u672C\u6587\u306B\u5B58\u5728\u3059\u308B\u60C5\u5831\u3092\u300C\u672A\u8A18\u8F09\u300D\u3068\u3057\u3066\u6307\u6458\u3057\u306A\u3044\u3067\u304F\u3060\u3055\u3044\u3002` : `Additional rules:
+- Reference date is ${asOf}. If you mention "current" or "latest", state it as of this date.
+- Do not claim something is missing when it appears in the content.`;
+    return `${baseInstruction.trimEnd()}
+
+${rules}`;
   }
   findFirstMatchingLineNumber(rawContent, matchText) {
     const index = rawContent.indexOf(matchText);
@@ -57409,7 +57771,7 @@ Object.defineProperty(exports, "__esModule", ({ value: true }));
 exports.buildReviewConfig = buildReviewConfig;
 const fs = __importStar(__nccwpck_require__(1943));
 const path_1 = __nccwpck_require__(6928);
-const core_1 = __nccwpck_require__(8381);
+const core_1 = __nccwpck_require__(1933);
 function isObject(value) {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -57449,8 +57811,51 @@ async function loadUserConfigFile(configPath) {
     }
     return { fileConfig, configDir, instructionContent };
 }
+async function loadOptionalInputFile(inputPath, label) {
+    if (!inputPath) {
+        return undefined;
+    }
+    const absPath = (0, path_1.resolve)(process.cwd(), inputPath);
+    try {
+        return await fs.readFile(absPath, 'utf-8');
+    }
+    catch (error) {
+        throw new Error(`Failed to read ${label} "${inputPath}": ${error instanceof Error ? error.message : String(error)}`);
+    }
+}
+function buildFactCheckInput(fileFactCheck, inputFactCheck, instruction) {
+    const fileFactCheckInput = fileFactCheck
+        ? {
+            ...(fileFactCheck.userLocation !== undefined
+                ? { userLocation: fileFactCheck.userLocation }
+                : {}),
+            ...(fileFactCheck.instruction !== undefined
+                ? { instruction: fileFactCheck.instruction }
+                : {}),
+            ...(fileFactCheck.enabled !== undefined ? { enabled: fileFactCheck.enabled } : {}),
+        }
+        : undefined;
+    const enabled = inputFactCheck ?? fileFactCheck?.enabled ?? false;
+    if (!enabled) {
+        if (inputFactCheck === false) {
+            return { enabled: false };
+        }
+        if (fileFactCheck?.enabled === false) {
+            return { ...fileFactCheckInput, enabled: false };
+        }
+        return undefined;
+    }
+    return {
+        ...fileFactCheckInput,
+        enabled: true,
+        ...(instruction !== undefined ? { instruction } : {}),
+    };
+}
 async function buildReviewConfig(inputs) {
     if (!inputs.config) {
+        const inputFactCheckInstruction = inputs.factCheck === true
+            ? await loadOptionalInputFile(inputs.factCheckInstruction, 'fact-check-instruction')
+            : undefined;
         const config = (0, core_1.createReviewConfig)({
             language: inputs.language,
             llm: {
@@ -57459,11 +57864,28 @@ async function buildReviewConfig(inputs) {
                 model: inputs.model,
             },
             severityLevel: inputs.severity,
+            factCheck: buildFactCheckInput(undefined, inputs.factCheck, inputFactCheckInstruction),
         });
         (0, core_1.validateConfig)(config);
         return config;
     }
-    const { fileConfig, instructionContent } = await loadUserConfigFile(inputs.config);
+    const { fileConfig, configDir, instructionContent } = await loadUserConfigFile(inputs.config);
+    const factCheckEnabled = inputs.factCheck ?? fileConfig.factCheck?.enabled ?? false;
+    let factCheckInstruction;
+    if (factCheckEnabled) {
+        if (inputs.factCheckInstruction) {
+            factCheckInstruction = await loadOptionalInputFile(inputs.factCheckInstruction, 'fact-check-instruction');
+        }
+        else if (fileConfig.factCheck?.instructionFile) {
+            const factCheckInstructionPath = (0, path_1.resolve)(configDir, fileConfig.factCheck.instructionFile);
+            try {
+                factCheckInstruction = await fs.readFile(factCheckInstructionPath, 'utf-8');
+            }
+            catch (error) {
+                throw new Error(`Failed to read factCheck.instructionFile "${fileConfig.factCheck.instructionFile}" from config: ${error instanceof Error ? error.message : String(error)}`);
+            }
+        }
+    }
     const config = (0, core_1.createReviewConfig)({
         ...fileConfig,
         instruction: instructionContent ?? fileConfig.instruction,
@@ -57475,6 +57897,7 @@ async function buildReviewConfig(inputs) {
             model: inputs.model ?? fileConfig.llm?.model,
         },
         severityLevel: inputs.severity ?? fileConfig.severityLevel,
+        factCheck: buildFactCheckInput(fileConfig.factCheck, inputs.factCheck, factCheckInstruction),
     });
     (0, core_1.validateConfig)(config);
     return config;
@@ -57695,9 +58118,20 @@ function formatReviewCommentBody(issue) {
     if (issue.suggestion) {
         body += `\n💡 **Suggestion**: ${issue.suggestion}\n`;
     }
+    if (issue.source?.url) {
+        body += `\n🔎 **Source**: ${formatSourceLink(issue.source)}\n`;
+    }
     body += '\n---\n';
     body += '_Posted by [content-reviewer-action](https://github.com/atkei/content-reviewer-action)_';
     return body;
+}
+function formatSourceLink(source) {
+    if (!source.title) {
+        return source.url;
+    }
+    const safeTitle = source.title.replace(/([\\[\]])/g, '\\$1');
+    const safeUrl = `<${source.url.replace(/</g, '%3C').replace(/>/g, '%3E')}>`;
+    return `[${safeTitle}](${safeUrl})`;
 }
 function formatReviewSummary(results) {
     let summary = `${COMMENT_MARKER}\n`;
@@ -57725,6 +58159,9 @@ function formatReviewSummary(results) {
                 summary += `${icon} **${issue.severity}**${lineInfo}: ${issue.message}\n`;
                 if (issue.suggestion) {
                     summary += `   💡 Suggestion: ${issue.suggestion}\n`;
+                }
+                if (issue.source?.url) {
+                    summary += `   🔎 Source: ${formatSourceLink(issue.source)}\n`;
                 }
                 summary += '\n';
             }
@@ -57786,6 +58223,18 @@ function isValidLanguage(value) {
 function isValidSeverity(value) {
     return ['error', 'warning', 'suggestion'].includes(value);
 }
+function getOptionalBooleanInput(name) {
+    const value = core.getInput(name);
+    if (!value) {
+        return undefined;
+    }
+    try {
+        return core.getBooleanInput(name);
+    }
+    catch {
+        throw new Error(`Invalid boolean value for ${name}: ${value}. Must be true or false`);
+    }
+}
 function getInputs() {
     const filesInput = core.getInput('files', { required: true });
     const files = filesInput.split(/\s+/).filter((f) => f.length > 0);
@@ -57826,6 +58275,8 @@ function getInputs() {
         throw new Error(`Invalid severity: ${severityRaw}. Must be one of: error, warning, suggestion`);
     }
     const severity = severityRaw;
+    const factCheck = getOptionalBooleanInput('fact-check');
+    const factCheckInstruction = core.getInput('fact-check-instruction') || undefined;
     const failOnError = core.getBooleanInput('fail-on-error');
     const commentPr = core.getBooleanInput('comment-pr');
     return {
@@ -57836,6 +58287,8 @@ function getInputs() {
         language,
         config,
         severity,
+        factCheck,
+        factCheckInstruction,
         failOnError,
         commentPr,
     };
@@ -57894,6 +58347,11 @@ async function run() {
         core.info(`Reviewing ${inputs.files.length} file pattern(s)...`);
         core.info(`Provider: ${inputs.provider ?? '(from config/default)'}`);
         core.info(`Language: ${inputs.language ?? '(from config/default)'}`);
+        core.info(`Fact check: ${inputs.factCheck === undefined
+            ? '(from config/default)'
+            : inputs.factCheck
+                ? 'enabled'
+                : 'disabled'}`);
         const results = await (0, reviewer_1.reviewFiles)(inputs);
         core.info(`Review completed: ${results.summary}`);
         (0, outputs_1.setOutputs)(results);
@@ -58016,7 +58474,7 @@ const fs = __importStar(__nccwpck_require__(1943));
 const core = __importStar(__nccwpck_require__(6966));
 const github = __importStar(__nccwpck_require__(4903));
 const glob_1 = __nccwpck_require__(3360);
-const core_1 = __nccwpck_require__(8381);
+const core_1 = __nccwpck_require__(1933);
 const config_1 = __nccwpck_require__(6878);
 const github_1 = __nccwpck_require__(4171);
 async function parseDocument(filePath) {
